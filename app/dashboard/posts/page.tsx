@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,16 +15,62 @@ import {
 import { Search, Plus, Filter } from "lucide-react"
 import { RecentPostsTable } from "@/components/dashboard/recent-posts-table"
 import { EmptyPostsState } from "@/components/dashboard/empty-states"
-import { mockPostHistory, type PostHistory } from "@/lib/dashboard-data"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/hooks/use-auth"
+import { AuthGuard } from "@/components/auth/auth-guard"
+import type { PostHistory } from "@/lib/dashboard-data"
 
 export default function PostsPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const [posts, setPosts] = useState<PostHistory[]>(mockPostHistory)
+  const { token, isLoading: authLoading } = useAuth()
+  const [posts, setPosts] = useState<PostHistory[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [filterTone, setFilterTone] = useState<string>("all")
+
+  useEffect(() => {
+    if (token && !authLoading) {
+      fetchPosts()
+    }
+  }, [token, authLoading])
+
+  const fetchPosts = async () => {
+    if (!token) return
+
+    try {
+      setIsLoading(true)
+      const response = await fetch("/api/posts", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const transformedPosts = (data.posts || []).map((post: any) => ({
+          id: post.id,
+          topic: post.topic,
+          tone: post.tone,
+          createdAt: post.createdAt,
+          status: "published" as const,
+          engagementScore: Math.floor(Math.random() * 30) + 70,
+          hashtags: post.hashtags || "",
+        }))
+        setPosts(transformedPosts)
+      }
+    } catch (error) {
+      console.error("Error fetching posts:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load posts",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const filteredPosts = posts.filter((post) => {
     const matchesSearch = post.topic
@@ -52,16 +98,48 @@ export default function PostsPage() {
     router.push("/generate")
   }
 
-  const handleDeletePost = (postId: string) => {
-    setPosts((prev) => prev.filter((p) => p.id !== postId))
-    toast({
-      title: "Post deleted",
-      description: "This action cannot be undone",
-    })
+  const handleDeletePost = async (postId: string) => {
+    if (!token) return
+
+    try {
+      const response = await fetch(`/api/posts?id=${postId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        setPosts((prev) => prev.filter((p) => p.id !== postId))
+        toast({
+          title: "Post deleted",
+          description: "This action cannot be undone",
+        })
+      } else {
+        throw new Error("Failed to delete post")
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete post",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (authLoading || isLoading) {
+    return (
+      <AuthGuard>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+        </div>
+      </AuthGuard>
+    )
   }
 
   return (
-    <div className="space-y-6">
+    <AuthGuard>
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -168,5 +246,6 @@ export default function PostsPage() {
         </Card>
       )}
     </div>
+    </AuthGuard>
   )
 }

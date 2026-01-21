@@ -58,7 +58,7 @@ export function HowItWorks() {
   }
 
   return (
-    <section className="py-20 md:py-32 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <section id="how-it-works" className="py-20 md:py-32 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background */}
       <div className="absolute top-1/2 left-0 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 pointer-events-none -translate-y-1/2" />
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 pointer-events-none" />

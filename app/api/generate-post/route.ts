@@ -1,4 +1,5 @@
-import { generateText } from "ai"
+import { NextRequest, NextResponse } from "next/server"
+import { generateLinkedInPost, generateHashtags } from "@/lib/ai-service"
 
 export const maxDuration = 30
 
@@ -8,53 +9,133 @@ interface PostRequest {
   tone: string
   length: string
   cta: string
-  grounding: boolean
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { topic, audience, tone, length, cta, grounding }: PostRequest = await req.json()
+    const body = await req.json()
+    const { topic, audience, tone, length, cta }: PostRequest = body
 
-    // Construct system instruction based on the workflow
-    const systemInstruction = `Act as a world-class professional copywriter specializing in LinkedIn content. Your posts must be highly engaging, use appropriate emojis sparingly, and utilize strategic line breaks to maximize readability on mobile devices. Ensure the first sentence is a compelling hook. Include a clear call to action at the end.
-
-Key guidelines:
-- Write in a ${tone} tone
-- Target audience: ${audience}
-- Length should be ${length}
-- Use strategic line breaks for mobile readability
-- Include relevant emojis but use them sparingly
-- Make the first sentence a compelling hook
-- End with the specified call to action
-- Format for LinkedIn's algorithm optimization`
-
-    // Construct user query based on the workflow template
-    const userQuery = `Generate a LinkedIn post about the following key message: ${topic}. The target audience is ${audience}. Adopt a ${tone} tone, and make it approximately ${length} length. The post must conclude with this specific call to action: ${cta}.`
-
-    // Configure the API call
-    const config: any = {
-      model: "google/gemini-2.5-flash",
-      system: systemInstruction,
-      prompt: userQuery,
-      maxOutputTokens: 2000,
-      temperature: 0.7,
+    // Validate input
+    if (!topic || !audience || !tone || !length || !cta) {
+      return NextResponse.json(
+        { error: "Missing required fields: topic, audience, tone, length, cta" },
+        { status: 400 }
+      )
     }
 
-    // Add Google Search grounding if requested
-    if (grounding) {
-      config.tools = [{ googleSearch: {} }]
+    // Map frontend tone values to backend enum
+    const toneMap: Record<string, "professional" | "founder" | "influencer" | "casual"> = {
+      "Professional": "professional",
+      "Founder": "founder", 
+      "Influencer": "influencer",
+      "Casual": "casual"
     }
+    
+    const mappedTone = toneMap[tone] || "professional"
+    
+    // Map frontend length values to backend enum
+    const lengthMap: Record<string, "short" | "medium" | "long"> = {
+      "Short (100-150 words)": "short",
+      "Medium (200-300 words)": "medium",
+      "Long (350-500 words)": "long"
+    }
+    
+    const mappedLength = lengthMap[length] || "medium"
 
-    const { text, usage, finishReason } = await generateText(config)
-
-    return Response.json({
-      post: text,
-      usage,
-      finishReason,
-      grounded: grounding,
+    // Generate post using Gemini
+    const generatedPost = await generateLinkedInPost({
+      topic,
+      audience,
+      tone: mappedTone,
+      length: mappedLength,
+      cta
     })
-  } catch (error) {
+
+    if (!generatedPost.content) {
+      return NextResponse.json(
+        { error: "Failed to generate post content" },
+        { status: 500 }
+      )
+    }
+
+    // Generate hashtags using Gemini
+    const hashtags = await generateHashtags(generatedPost.content)
+
+    // Calculate engagement score
+    const engagementScore = calculateEngagementScore(generatedPost.content, hashtags)
+
+    return NextResponse.json({
+      post: generatedPost.content,
+      hashtags,
+      engagement: {
+        score: engagementScore,
+        potential: getEngagementPotential(engagementScore),
+      },
+      usage: generatedPost.usage
+    })
+  } catch (error: any) {
     console.error("Error generating post:", error)
-    return Response.json({ error: "Failed to generate post. Please try again." }, { status: 500 })
+
+    if (error.message?.includes("API key")) {
+      return NextResponse.json(
+        { error: "API configuration error", message: "GEMINI_API_KEY not configured" },
+        { status: 500 }
+      )
+    }
+
+    if (error.message?.includes("quota")) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 429 }
+      )
+    }
+
+    return NextResponse.json(
+      {
+        error: "Failed to generate post",
+        message: error.message || "An unexpected error occurred",
+      },
+      { status: 500 }
+    )
   }
+}
+
+/**
+ * Calculate engagement score
+ */
+function calculateEngagementScore(content: string, hashtags: string): number {
+  let score = 50
+  const wordCount = content.split(/\s+/).length
+  if (wordCount >= 150 && wordCount <= 300) score += 20
+  else if (wordCount >= 100 && wordCount <= 400) score += 10
+
+  const charCount = content.length
+  if (charCount <= 3000) score += 10
+
+  const lineBreaks = (content.match(/\n/g) || []).length
+  if (lineBreaks >= 3) score += 10
+  else if (lineBreaks >= 1) score += 5
+
+  const hashtagCount = (hashtags.match(/#\w+/g) || []).length
+  if (hashtagCount >= 3 && hashtagCount <= 5) score += 10
+
+  const questionMarks = (content.match(/\?/g) || []).length
+  if (questionMarks >= 1) score += 5
+
+  const ctaWords = ["comment", "share", "thoughts", "experience", "opinion", "agree", "disagree", "let me know"]
+  const hasCTA = ctaWords.some((word) => content.toLowerCase().includes(word))
+  if (hasCTA) score += 5
+
+  return Math.min(score, 100)
+}
+
+/**
+ * Get engagement potential description
+ */
+function getEngagementPotential(score: number): string {
+  if (score >= 80) return "Excellent - High engagement potential"
+  if (score >= 60) return "Good - Solid engagement potential"
+  if (score >= 40) return "Fair - Moderate engagement potential"
+  return "Needs improvement - Low engagement potential"
 }

@@ -1,36 +1,39 @@
-import { generateText } from "ai"
+import { NextRequest, NextResponse } from "next/server";
+import { generateHashtags } from "@/lib/ai-service";
 
-export const maxDuration = 30
+export const maxDuration = 30;
 
 interface HashtagRequest {
-  postContent: string
+  postContent: string;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { postContent }: HashtagRequest = await req.json()
+    const { postContent }: HashtagRequest = await req.json();
 
-    const { text } = await generateText({
-      model: "google/gemini-2.5-flash",
-      prompt: `Analyze the following LinkedIn post text and provide 5 highly relevant and trending hashtags separated by spaces, with no other text or explanation. Just return the hashtags with # symbols:
+    if (!postContent || postContent.length < 10) {
+      return NextResponse.json(
+        { error: "Post content must be at least 10 characters" },
+        { status: 400 }
+      );
+    }
 
-${postContent}`,
-      maxOutputTokens: 100,
-      temperature: 0.3,
-    })
+    // Generate hashtags using AI service abstraction (supports Groq, Gemini, etc.)
+    const hashtags = await generateHashtags(postContent);
 
-    // Clean up the response to ensure we only get hashtags
-    const hashtags = text
-      .trim()
-      .split(/\s+/)
-      .filter((tag) => tag.startsWith("#"))
-      .slice(0, 5)
+    return NextResponse.json({
+      success: true,
+      hashtags,
+    });
+  } catch (error: any) {
+    console.error("Error generating hashtags:", error);
 
-    return Response.json({
-      hashtags: hashtags.join(" "),
-    })
-  } catch (error) {
-    console.error("Error generating hashtags:", error)
-    return Response.json({ error: "Failed to generate hashtags. Please try again." }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Failed to generate hashtags",
+        message: error.message || "An unexpected error occurred",
+      },
+      { status: 500 }
+    );
   }
 }

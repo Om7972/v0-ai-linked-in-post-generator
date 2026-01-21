@@ -1,0 +1,36 @@
+{
+  "name": "AI LinkedIn Post Generator",
+  "short_name": "AI Post Gen",
+  "description": "Create engaging, professional LinkedIn posts powered by Gemini AI. Generate viral content in seconds.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#030712",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ],
+  "categories": ["productivity", "business", "social"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Generate Post",
+      "short_name": "Generate",
+      "description": "Create a new LinkedIn post",
+      "url": "/generate",
+      "icons": [{ "src": "/favicon.ico", "sizes": "any" }]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View your posts and analytics",
+      "url": "/dashboard",
+      "icons": [{ "src": "/favicon.ico", "sizes": "any" }]
+    }
+  ]
+}
+

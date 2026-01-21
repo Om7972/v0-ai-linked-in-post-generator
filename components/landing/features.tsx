@@ -58,7 +58,7 @@ export function Features() {
   }
 
   return (
-    <section className="py-20 md:py-32 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <section id="features" className="py-20 md:py-32 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background elements */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10 pointer-events-none" />

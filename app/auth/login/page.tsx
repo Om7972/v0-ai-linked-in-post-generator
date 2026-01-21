@@ -8,9 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Logo } from "@/components/brand/logo"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function LoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -22,22 +24,16 @@ export default function LoginPage() {
     setError("")
 
     try {
-      // Simulate authentication
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
       if (!email || !password) {
         setError("Please fill in all fields")
         setIsLoading(false)
         return
       }
 
-      // For demo, accept any valid email/password
-      localStorage.setItem("isAuthenticated", "true")
-      localStorage.setItem("userEmail", email)
-      
+      await login(email, password)
       router.push("/dashboard")
-    } catch (err) {
-      setError("Login failed. Please try again.")
+    } catch (err: any) {
+      setError(err.message || "Login failed. Please try again.")
       setIsLoading(false)
     }
   }

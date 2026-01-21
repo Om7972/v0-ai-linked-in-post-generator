@@ -79,12 +79,24 @@ export function MobileNav({ navItems, isAppPage }: MobileNavProps) {
           {navItems.map((item) => {
             const Icon = item.icon as LucideIcon | undefined
             const isActive = pathname === item.href
+            const isAnchorLink = item.href.startsWith("#")
+            
+            const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+              setIsOpen(false)
+              if (isAnchorLink) {
+                e.preventDefault()
+                const element = document.querySelector(item.href)
+                if (element) {
+                  element.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              }
+            }
             
             return (
               <Link
                 key={item.label}
                 href={item.href}
-                onClick={() => setIsOpen(false)}
+                onClick={handleClick}
                 className={cn(
                   "px-4 py-3 text-base font-medium rounded-lg flex items-center gap-3 transition-colors",
                   isActive

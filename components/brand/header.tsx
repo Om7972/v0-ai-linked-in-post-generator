@@ -10,7 +10,9 @@ import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import type { LucideIcon } from "lucide-react"
-import { LayoutDashboard, Zap, Settings, BarChart3, FileText, Sparkles, Users } from "lucide-react"
+import { useAuth } from "@/hooks/use-auth"
+import { UserDropdown } from "@/components/dashboard/user-dropdown"
+import { LayoutDashboard, Zap, Settings, BarChart3, FileText, Sparkles, Users, LogIn, UserPlus, Rocket } from "lucide-react"
 
 // Navigation items with icons and active states
 const navItems: Array<{ label: string; href: string; icon: LucideIcon; isApp: boolean }> = [
@@ -22,12 +24,15 @@ const navItems: Array<{ label: string; href: string; icon: LucideIcon; isApp: bo
   { label: "Pricing", href: "/pricing", icon: BarChart3, isApp: false },
 ]
 
-// Landing page only nav items (shown when not logged in or on landing)
+// Landing page nav items - includes all features for easy access
 const landingNavItems: Array<{ label: string; href: string; icon?: LucideIcon }> = [
   { label: "Features", href: "#features" },
   { label: "How It Works", href: "#how-it-works" },
-  { label: "Pricing", href: "/pricing" },
-  { label: "Onboarding", href: "/onboarding" },
+  { label: "Generate", href: "/generate", icon: Zap },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Power-User", href: "/power-user", icon: Sparkles },
+  { label: "Onboarding", href: "/onboarding", icon: Rocket },
+  { label: "Pricing", href: "/pricing", icon: BarChart3 },
 ]
 
 /**
@@ -42,9 +47,10 @@ const landingNavItems: Array<{ label: string; href: string; icon?: LucideIcon }>
 export function Header() {
   const pathname = usePathname()
   const [hasScrolled, setHasScrolled] = useState(false)
+  const { isAuthenticated } = useAuth()
   
   // Determine if we're on an app page (authenticated area)
-  const isAppPage = pathname.startsWith("/dashboard") || pathname === "/generate"
+  const isAppPage = pathname.startsWith("/dashboard") || pathname === "/generate" || pathname === "/power-user"
   
   // Use appropriate nav items based on page context
   const activeNavItems = isAppPage ? navItems : landingNavItems
@@ -80,11 +86,23 @@ export function Header() {
           {activeNavItems.map((item) => {
             const isActive = pathname === item.href
             const Icon = "icon" in item ? (item.icon as LucideIcon) : null
+            const isAnchorLink = item.href.startsWith("#")
+            
+            const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+              if (isAnchorLink) {
+                e.preventDefault()
+                const element = document.querySelector(item.href)
+                if (element) {
+                  element.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              }
+            }
             
             return (
               <Link
                 key={item.label}
                 href={item.href}
+                onClick={handleClick}
                 className={cn(
                   "px-3 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors",
                   isActive
@@ -106,7 +124,7 @@ export function Header() {
 
           {/* Desktop CTAs */}
           <div className="hidden sm:flex items-center gap-3">
-            {!isAppPage && (
+            {!isAuthenticated && (
               <>
                 <Link href="/auth/login">
                   <Button variant="outline" className="border-gray-300 dark:border-gray-700">
@@ -121,13 +139,7 @@ export function Header() {
                 </Link>
               </>
             )}
-            {isAppPage && (
-              <Link href="/dashboard/settings">
-                <Button variant="outline" className="border-gray-300 dark:border-gray-700">
-                  Profile
-                </Button>
-              </Link>
-            )}
+            {isAuthenticated && <UserDropdown />}
           </div>
 
           {/* Mobile menu */}

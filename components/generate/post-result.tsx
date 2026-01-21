@@ -28,6 +28,7 @@ interface PostResultProps {
   }
   tone: string
   onRegenerate: () => void
+  onRefine?: (refinementType: string, customInstruction?: string) => void
   onDownload: () => void
   onSaveDraft: () => void
   isRegenerating?: boolean
@@ -39,6 +40,7 @@ export function PostResult({
   engagement,
   tone,
   onRegenerate,
+  onRefine,
   onDownload,
   onSaveDraft,
   isRegenerating = false,

@@ -1,56 +1,52 @@
-import { generateText } from "ai"
+import { NextRequest, NextResponse } from "next/server";
+import { refineLinkedInPost } from "@/lib/ai-service";
 
-export const maxDuration = 30
+export const maxDuration = 30;
 
 interface RefineRequest {
-  currentPost: string
-  refinementType: string
-  customInstruction?: string
+  currentPost: string;
+  refinementType: string;
+  customInstruction?: string;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { currentPost, refinementType, customInstruction }: RefineRequest = await req.json()
+    const { currentPost, refinementType, customInstruction }: RefineRequest = await req.json();
 
-    let refinementPrompt = ""
-
-    switch (refinementType) {
-      case "urgent":
-        refinementPrompt =
-          "Make this LinkedIn post sound more urgent and compelling. Maintain the same core message but add urgency and immediacy to the tone."
-        break
-      case "example":
-        refinementPrompt =
-          "Add another concrete example or case study to this LinkedIn post to make it more engaging and relatable."
-        break
-      case "shorten":
-        refinementPrompt =
-          "Shorten this LinkedIn post by approximately 50 words while maintaining all key points and the call to action."
-        break
-      case "custom":
-        refinementPrompt = customInstruction || "Improve this LinkedIn post"
-        break
-      default:
-        refinementPrompt = "Improve this LinkedIn post to make it more engaging and professional."
+    if (!currentPost || currentPost.length < 10) {
+      return NextResponse.json(
+        { error: "Post content must be at least 10 characters" },
+        { status: 400 }
+      );
     }
 
-    const { text } = await generateText({
-      model: "google/gemini-2.5-flash",
-      prompt: `${refinementPrompt}
+    // Refine post using AI service abstraction (supports Groq, Gemini, etc.)
+    const refinedPost = await refineLinkedInPost(
+      currentPost,
+      refinementType,
+      customInstruction
+    );
 
-Current post:
-${currentPost}
+    if (!refinedPost) {
+      return NextResponse.json(
+        { error: "Failed to refine post content" },
+        { status: 500 }
+      );
+    }
 
-Please provide the refined version:`,
-      maxOutputTokens: 2000,
-      temperature: 0.7,
-    })
+    return NextResponse.json({
+      success: true,
+      refinedPost,
+    });
+  } catch (error: any) {
+    console.error("Error refining post:", error);
 
-    return Response.json({
-      refinedPost: text.trim(),
-    })
-  } catch (error) {
-    console.error("Error refining post:", error)
-    return Response.json({ error: "Failed to refine post. Please try again." }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Failed to refine post",
+        message: error.message || "An unexpected error occurred",
+      },
+      { status: 500 }
+    );
   }
 }

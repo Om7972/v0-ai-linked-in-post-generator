@@ -12,7 +12,6 @@ import {
 } from "@/components/generate/generator-form"
 import { PostResult } from "@/components/generate/post-result"
 import { PostSkeleton, FormSkeleton } from "@/components/generate/skeleton-loaders"
-import { mockGeneratePost, mockRegeneratePost } from "@/lib/mock-gemini"
 import {
   TemplateLibrary,
   ViralAnalyzer,
@@ -23,6 +22,8 @@ import {
   CommandPalette,
 } from "@/components/power-user"
 import { useDraftAutoSave } from "@/hooks/use-draft-auto-save"
+import { useAuth } from "@/hooks/use-auth"
+import { useRouter } from "next/navigation"
 
 interface GeneratedContent {
   post: string
@@ -36,6 +37,8 @@ interface GeneratedContent {
 }
 
 export default function GeneratePage() {
+  const { isAuthenticated, isLoading: authLoading, user, token } = useAuth()
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [isRegenerating, setIsRegenerating] = useState(false)
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(
@@ -44,13 +47,20 @@ export default function GeneratePage() {
   const [formData, setFormData] = useState<GeneratorFormData | null>(null)
   const { toast } = useToast()
 
-  // Draft auto-save
+  // Draft auto-save - must be called before any conditional returns
   const draftAutoSave = useDraftAutoSave(
     generatedContent?.post || "",
     formData?.topic || "",
     formData?.audience || "",
     (formData?.tone as "Professional" | "Founder" | "Influencer" | "Casual") || "Professional"
   )
+
+  // Check authentication status
+  useEffect(() => {
+    if (!isAuthenticated && !authLoading) {
+      router.push("/auth/login")
+    }
+  }, [isAuthenticated, authLoading, router])
 
   // Keyboard shortcut handler
   useEffect(() => {
@@ -96,25 +106,65 @@ export default function GeneratePage() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [isLoading, generatedContent, formData, toast])
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return null // Will redirect via useEffect
+  }
+
   const handleGenerate = async (data: GeneratorFormData) => {
     setIsLoading(true)
     setFormData(data)
 
     try {
-      const result = await mockGeneratePost({
-        topic: data.topic,
-        audience: data.audience,
-        tone: data.tone,
-        length: data.length,
-        includeEmoji: data.includeEmoji,
-        includeCTA: true,
-        cta: data.cta,
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          topic: data.topic,
+          audience: data.audience,
+          tone: data.tone,
+          length: data.length,
+          cta: data.cta,
+        }),
       })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to generate post")
+      }
+
+      const result = await response.json()
+
+      // Generate hashtags
+      let hashtags = result.hashtags || ""
+
+      // Calculate engagement score
+      const engagement = {
+        score: result.engagement?.score || 75,
+        potential: result.engagement?.potential || "Good - Solid engagement potential",
+        breakdown: {
+          "Optimal Length": 15,
+          "Clear CTA": 15,
+          "Visual Breaks": 15,
+          "Hashtag Usage": hashtags ? 10 : 0,
+          "Emoji Usage": data.includeEmoji ? 10 : 0,
+        },
+      }
 
       setGeneratedContent({
         post: result.post,
-        hashtags: result.hashtags,
-        engagement: result.engagement,
+        hashtags,
+        engagement,
         tone: data.tone,
       })
 
@@ -122,11 +172,23 @@ export default function GeneratePage() {
         title: "Post Generated!",
         description: "Your LinkedIn post is ready. Review and customize it below.",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating post:", error)
+      
+      // Handle authentication errors specifically
+      if (error.message === "Unauthorized" || error.message.includes("profile not found")) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to generate posts.",
+          variant: "destructive",
+        })
+        router.push("/auth/login")
+        return
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to generate post. Please try again.",
+        description: error.message || "Failed to generate post. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -140,21 +202,34 @@ export default function GeneratePage() {
     setIsRegenerating(true)
 
     try {
-      const post = await mockRegeneratePost({
-        topic: formData.topic,
-        audience: formData.audience,
-        tone: formData.tone,
-        length: formData.length,
-        includeEmoji: formData.includeEmoji,
-        includeCTA: true,
-        cta: formData.cta,
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          topic: formData.topic,
+          audience: formData.audience,
+          tone: formData.tone,
+          length: formData.length,
+          cta: formData.cta,
+        }),
       })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to regenerate post")
+      }
+
+      const result = await response.json()
 
       setGeneratedContent((prev) =>
         prev
           ? {
               ...prev,
-              post,
+              post: result.post,
+              hashtags: result.hashtags || prev.hashtags,
             }
           : null
       )
@@ -163,11 +238,62 @@ export default function GeneratePage() {
         title: "Regenerated!",
         description: "New post generated with the same settings.",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error regenerating post:", error)
       toast({
         title: "Error",
-        description: "Failed to regenerate post. Please try again.",
+        description: error.message || "Failed to regenerate post. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRegenerating(false)
+    }
+  }
+
+  const handleRefinePost = async (refinementType: string, customInstruction?: string) => {
+    if (!generatedContent || !token) return
+
+    setIsRegenerating(true)
+
+    try {
+      const response = await fetch("/api/generate/refine", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPost: generatedContent.post,
+          refinementType,
+          customInstruction,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to refine post")
+      }
+
+      const result = await response.json()
+
+      setGeneratedContent((prev) =>
+        prev
+          ? {
+              ...prev,
+              post: result.refinedPost,
+            }
+          : null
+      )
+
+      toast({
+        title: "Post refined!",
+        description: "Your post has been refined successfully.",
+      })
+    } catch (error: any) {
+      console.error("Error refining post:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to refine post. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -369,6 +495,7 @@ export default function GeneratePage() {
                 engagement={generatedContent.engagement}
                 tone={generatedContent.tone}
                 onRegenerate={handleRegenerate}
+                onRefine={handleRefinePost}
                 onDownload={handleDownload}
                 onSaveDraft={handleNewPost}
                 isRegenerating={isRegenerating}

@@ -186,7 +186,7 @@ export function analyzePostForViral(content: string): ViralAnalysis {
     {
       name: "Call-to-Action",
       score: content.toLowerCase().includes("?") ? 85 : 45,
-      impact: content.toLowerCase().includes("?") ? "positive" : "negative",
+      impact: (content.toLowerCase().includes("?") ? "positive" : "negative") as "positive" | "negative",
       tip: "Questions encourage responses. Try ending with a genuine question",
     },
     {

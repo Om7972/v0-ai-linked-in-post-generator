@@ -9,9 +9,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Logo } from "@/components/brand/logo"
+import { useAuth } from "@/hooks/use-auth"
 
 export default function SignupPage() {
   const router = useRouter()
+  const { signup } = useAuth()
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -61,17 +63,10 @@ export default function SignupPage() {
         return
       }
 
-      // Simulate signup
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Store user data
-      localStorage.setItem("isAuthenticated", "true")
-      localStorage.setItem("userName", formData.name)
-      localStorage.setItem("userEmail", formData.email)
-
+      await signup(formData.name, formData.email, formData.password)
       router.push("/onboarding")
-    } catch (err) {
-      setError("Signup failed. Please try again.")
+    } catch (err: any) {
+      setError(err.message || "Signup failed. Please try again.")
       setIsLoading(false)
     }
   }

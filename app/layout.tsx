@@ -6,6 +6,8 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { Header } from '@/components/brand/header'
 import { LogoFavicon } from '@/components/brand/logo'
 import { OnboardingDialog } from '@/components/onboarding'
+import { AuthProvider } from '@/hooks/use-auth'
+import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
 const APP_NAME = "AI LinkedIn Post Generator"
@@ -45,8 +47,6 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: '/favicon.ico',
-    shortcut: '/favicon-16x16.png',
-    apple: '/apple-touch-icon.png',
   },
   manifest: '/manifest.json',
 }
@@ -76,12 +76,15 @@ export default function RootLayout({
       </head>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} bg-white dark:bg-black text-black dark:text-white`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <Header />
-          <OnboardingDialog />
-          <main className="pt-16">
-            {children}
-          </main>
-          <Analytics />
+          <AuthProvider>
+            <Header />
+            <OnboardingDialog />
+            <main className="pt-16">
+              {children}
+            </main>
+            <Toaster />
+            <Analytics />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
