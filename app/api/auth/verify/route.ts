@@ -69,6 +69,7 @@ async function handleVerify(req: NextRequest) {
         id: user.id,
         email: user.email,
         name: profile?.name || user.user_metadata?.name || user.email?.split("@")[0] || "User",
+        avatarUrl: profile?.avatar_url || user.user_metadata?.avatar_url,
         plan: profile?.plan || "free",
       },
       authenticated: true,

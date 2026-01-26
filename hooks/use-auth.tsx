@@ -7,6 +7,7 @@ interface User {
   id: string
   name: string
   email: string
+  avatarUrl?: string
 }
 
 interface AuthContextType {
@@ -82,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Supabase returns accessToken in the response
     const token = data.accessToken || data.token || data.session?.access_token
     setToken(token)
-    setUser(data.user)
+    setUser(data.user) // The user object from the API now contains avatarUrl
     if (token) {
       localStorage.setItem("auth_token", token)
     }

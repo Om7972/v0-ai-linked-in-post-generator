@@ -15,6 +15,7 @@ if (!GROQ_API_KEY) {
 }
 
 // Initialize Groq client if API key exists
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama3-70b-8192";
 const groq = GROQ_API_KEY ? new Groq({ apiKey: GROQ_API_KEY }) : null;
 
 export interface GeneratePostParams {
@@ -64,7 +65,7 @@ export async function generateLinkedInPost(
           content: prompt,
         },
       ],
-      model: "llama-3.1-70b-versatile", // Updated model name that works
+      model: GROQ_MODEL, // Updated model name that works
       temperature: 0.7,
       max_tokens: 1000,
       top_p: 1,
@@ -134,7 +135,7 @@ Hashtags:`;
           content: prompt,
         },
       ],
-      model: "llama-3.1-70b-versatile", // Currently available model
+      model: GROQ_MODEL, // Currently available model
       temperature: 0.3,
       max_tokens: 100,
       top_p: 1,
@@ -207,7 +208,7 @@ Please provide the refined version:`;
           content: prompt,
         },
       ],
-      model: "llama-3.1-70b-versatile", // Currently available model
+      model: GROQ_MODEL, // Currently available model
       temperature: 0.6,
       max_tokens: 1000,
       top_p: 1,

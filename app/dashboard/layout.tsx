@@ -1,19 +1,43 @@
+"use client"
+
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/hooks/use-auth"
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { UserDropdown } from "@/components/dashboard/user-dropdown"
-import { Bell, Search } from "lucide-react"
+import { Bell, Search, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 
-export const metadata = {
-  title: "Dashboard | PostGenius",
-  description: "Track your LinkedIn post performance and analytics",
-}
+// Metadata is defined in the parent layout (app/layout.tsx) or page-specific files
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const { isAuthenticated, isLoading } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/auth/login")
+    }
+  }, [isAuthenticated, isLoading, router])
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    // Fallback while redirecting
+    return null
+  }
+
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}

@@ -38,6 +38,16 @@ export async function GET(req: NextRequest) {
     }
 
     const postsList = posts || []
+
+    // Get drafts count
+    const { count: draftsCount, error: draftsError } = await supabase
+      .from("drafts")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+
+    if (draftsError) {
+      console.error("Drafts error:", draftsError)
+    }
     
     // Calculate stats
     const stats = {
@@ -45,7 +55,7 @@ export async function GET(req: NextRequest) {
       avgEngagementScore: postsList.length > 0
         ? Math.round(postsList.reduce((sum, p) => sum + (p.engagement_score || 0), 0) / postsList.length)
         : 0,
-      savedDrafts: 0, // TODO: Get from drafts table
+      savedDrafts: draftsCount || 0,
       totalEngagements: postsList.length * 150, // Mock data
     }
 
