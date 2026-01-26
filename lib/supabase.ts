@@ -45,8 +45,8 @@ export function createServerSupabaseClient() {
  */
 export async function createServerSupabaseClientWithSession() {
   const cookieStore = await cookies()
-  
-  return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+
+  return createServerClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value

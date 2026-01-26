@@ -1,42 +1,52 @@
 /**
- * GET /api/usage
- * 
- * Get current usage status for the authenticated user
- * Returns remaining quota, limit, and reset time
+ * Usage API
+ * Get current usage stats and limits
  */
 
-import { NextRequest, NextResponse } from "next/server"
-import { requireAuth } from "@/lib/auth"
-import { getUsageStatus } from "@/lib/rateLimit"
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase';
+import { UsageService } from '@/lib/services/usage-service';
 
 export async function GET(req: NextRequest) {
+  const supabase = createServerSupabaseClient();
+
   try {
-    const user = await requireAuth()
-    const usageStatus = await getUsageStatus(user.id)
-
-    return NextResponse.json({
-      usage: {
-        remaining: usageStatus.remaining,
-        limit: usageStatus.limit,
-        used: usageStatus.limit - usageStatus.remaining,
-        resetAt: usageStatus.resetAt.toISOString(),
-        canGenerate: usageStatus.canGenerate,
-      },
-    })
-  } catch (error: any) {
-    console.error("Error fetching usage:", error)
-
-    if (error.message === "Unauthorized") {
+    // Authentication
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
       return NextResponse.json(
-        { error: "Authentication required" },
+        { error: 'Missing authorization header' },
         { status: 401 }
-      )
+      );
     }
 
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // Get usage stats
+    const stats = await UsageService.getUsageStats(user.id);
+
+    // Check if can generate
+    const limitCheck = await UsageService.checkLimit(user.id);
+
+    return NextResponse.json({
+      ...stats,
+      canGenerate: limitCheck.can_generate,
+      reason: limitCheck.reason,
+    });
+
+  } catch (error: any) {
+    console.error('Error getting usage:', error);
     return NextResponse.json(
-      { error: "Failed to fetch usage", message: error.message },
+      { error: 'Failed to get usage', message: error.message },
       { status: 500 }
-    )
+    );
   }
 }
-

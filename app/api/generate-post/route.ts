@@ -1,141 +1,278 @@
-import { NextRequest, NextResponse } from "next/server"
-import { generateLinkedInPost, generateHashtags } from "@/lib/ai-service"
+/**
+ * Enhanced Generate Post API
+ * Production-ready with all SaaS features:
+ * - Usage limits & tracking
+ * - AI response caching
+ * - Template system
+ * - Version history
+ * - Hashtag intelligence
+ * - Engagement scoring
+ */
 
-export const maxDuration = 30
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase';
+import { generateLinkedInPost, generateHashtags } from '@/lib/ai-service';
+import { UsageService } from '@/lib/services/usage-service';
+import { CacheService } from '@/lib/services/cache-service';
+import { TemplateService } from '@/lib/services/template-service';
+import { HashtagService } from '@/lib/services/hashtag-service';
+import { EngagementScoreEngine } from '@/lib/services/engagement-service';
+import type { GeneratePostRequest, GeneratePostResponse } from '@/types/database';
 
-interface PostRequest {
-  topic: string
-  audience: string
-  tone: string
-  length: string
-  cta: string
-}
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
+  const supabase = createServerSupabaseClient();
+
   try {
-    const body = await req.json()
-    const { topic, audience, tone, length, cta }: PostRequest = body
+    // 1. AUTHENTICATION
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      return NextResponse.json(
+        { error: 'Missing authorization header' },
+        { status: 401 }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    // 2. PARSE REQUEST
+    const body: GeneratePostRequest = await req.json();
+    const { topic, audience, tone, length, cta, templateId, teamId } = body;
 
     // Validate input
     if (!topic || !audience || !tone || !length || !cta) {
       return NextResponse.json(
-        { error: "Missing required fields: topic, audience, tone, length, cta" },
+        { error: 'Missing required fields: topic, audience, tone, length, cta' },
         { status: 400 }
-      )
+      );
     }
 
-    // Map frontend tone values to backend enum
-    const toneMap: Record<string, "professional" | "founder" | "influencer" | "casual"> = {
-      "Professional": "professional",
-      "Founder": "founder", 
-      "Influencer": "influencer",
-      "Casual": "casual"
-    }
-    
-    const mappedTone = toneMap[tone] || "professional"
-    
-    // Map frontend length values to backend enum
-    const lengthMap: Record<string, "short" | "medium" | "long"> = {
-      "Short (100-150 words)": "short",
-      "Medium (200-300 words)": "medium",
-      "Long (350-500 words)": "long"
-    }
-    
-    const mappedLength = lengthMap[length] || "medium"
+    // 3. CHECK USAGE LIMITS
+    const usageCheck = await UsageService.checkLimit(user.id);
 
-    // Generate post using Gemini
-    const generatedPost = await generateLinkedInPost({
-      topic,
-      audience,
-      tone: mappedTone,
-      length: mappedLength,
-      cta
-    })
-
-    if (!generatedPost.content) {
+    if (!usageCheck.can_generate) {
       return NextResponse.json(
-        { error: "Failed to generate post content" },
-        { status: 500 }
-      )
+        {
+          error: 'Usage limit reached',
+          message: usageCheck.reason,
+          usage: {
+            daily: {
+              used: usageCheck.daily_used,
+              limit: usageCheck.daily_limit,
+            },
+            monthly: {
+              used: usageCheck.monthly_used,
+              limit: usageCheck.monthly_limit,
+            },
+          },
+        },
+        { status: 429 }
+      );
     }
 
-    // Generate hashtags using Gemini
-    const hashtags = await generateHashtags(generatedPost.content)
+    // 4. GET PLAN LIMITS
+    const planLimits = await UsageService.getPlanLimits(user.id);
 
-    // Calculate engagement score
-    const engagementScore = calculateEngagementScore(generatedPost.content, hashtags)
+    // 5. MAP FRONTEND VALUES TO BACKEND ENUMS
+    const toneMap: Record<string, 'professional' | 'founder' | 'influencer' | 'casual'> = {
+      'Professional': 'professional',
+      'Founder': 'founder',
+      'Influencer': 'influencer',
+      'Casual': 'casual',
+    };
 
-    return NextResponse.json({
-      post: generatedPost.content,
-      hashtags,
+    const lengthMap: Record<string, 'short' | 'medium' | 'long'> = {
+      'Short (100-150 words)': 'short',
+      'Medium (200-300 words)': 'medium',
+      'Long (350-500 words)': 'long',
+    };
+
+    const mappedTone = toneMap[tone] || 'professional';
+    const mappedLength = lengthMap[length] || 'medium';
+
+    // 6. CHECK CACHE (if plan allows)
+    let cachedResponse = null;
+    let isCached = false;
+
+    if (planLimits.can_use_ai_cache) {
+      cachedResponse = await CacheService.get({
+        topic,
+        tone: mappedTone,
+        audience,
+        length: mappedLength,
+        cta,
+        templateId,
+      });
+
+      if (cachedResponse) {
+        isCached = true;
+        console.log('✅ Cache hit - using cached response');
+      }
+    }
+
+    let postContent: string;
+    let hashtagsText: string;
+    let aiUsage: { promptTokens: number; completionTokens: number; totalTokens: number } = {
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0
+    };
+
+    if (isCached && cachedResponse) {
+      // Use cached response
+      postContent = cachedResponse.content;
+      hashtagsText = cachedResponse.hashtags || '';
+    } else {
+      // 7. GENERATE NEW CONTENT
+
+      // Get template if specified
+      let template = null;
+      if (templateId && planLimits.can_use_templates) {
+        template = await TemplateService.getTemplateById(templateId);
+      }
+
+      // Generate post using AI
+      const generatedPost = await generateLinkedInPost({
+        topic,
+        audience,
+        tone: mappedTone,
+        length: mappedLength,
+        cta,
+      });
+
+      if (!generatedPost.content) {
+        return NextResponse.json(
+          { error: 'Failed to generate post content' },
+          { status: 500 }
+        );
+      }
+
+      postContent = generatedPost.content;
+      aiUsage = generatedPost.usage || aiUsage;
+
+      // Generate hashtags
+      hashtagsText = await generateHashtags(postContent);
+
+      // Cache the response (if plan allows)
+      if (planLimits.can_use_ai_cache) {
+        await CacheService.set(
+          {
+            topic,
+            tone: mappedTone,
+            audience,
+            length: mappedLength,
+            cta,
+            templateId,
+          },
+          {
+            content: postContent,
+            hashtags: hashtagsText,
+            engagement_score: null, // Will be calculated below
+          }
+        );
+      }
+    }
+
+    // 8. ANALYZE HASHTAGS
+    const hashtagAnalysis = HashtagService.analyzeHashtags(
+      hashtagsText,
+      postContent,
+      planLimits.hashtag_limit
+    );
+
+    // Limit hashtags based on plan
+    const limitedHashtags = hashtagAnalysis
+      .slice(0, planLimits.hashtag_limit)
+      .map(h => h.tag)
+      .join(' ');
+
+    // 9. CALCULATE ENGAGEMENT SCORE
+    const engagementAnalysis = EngagementScoreEngine.calculate({
+      content: postContent,
+      hashtags: limitedHashtags,
+    });
+
+    // 10. SAVE TO DATABASE
+    const { data: post, error: postError } = await supabase
+      .from('posts')
+      .insert({
+        user_id: user.id,
+        topic,
+        tone: mappedTone,
+        audience,
+        length: mappedLength,
+        content: postContent,
+        hashtags: limitedHashtags,
+        engagement_score: engagementAnalysis.score,
+        team_id: teamId || null,
+        template_id: templateId || null,
+        is_cached: isCached,
+        cache_hit: isCached,
+      })
+      .select()
+      .single();
+
+    if (postError) {
+      console.error('Error saving post:', postError);
+      throw postError;
+    }
+
+    // 11. STORE HASHTAG INTELLIGENCE
+    await HashtagService.storeHashtagIntelligence(post.id, hashtagAnalysis);
+
+    // 12. INCREMENT USAGE (only if not cached)
+    if (!isCached) {
+      await UsageService.incrementUsage(user.id);
+    }
+
+    // 13. RETURN RESPONSE
+    const response: GeneratePostResponse = {
+      post: postContent,
+      hashtags: limitedHashtags,
       engagement: {
-        score: engagementScore,
-        potential: getEngagementPotential(engagementScore),
+        score: engagementAnalysis.score,
+        potential: engagementAnalysis.potential,
       },
-      usage: generatedPost.usage
-    })
-  } catch (error: any) {
-    console.error("Error generating post:", error)
+      usage: aiUsage,
+      cached: isCached,
+      postId: post.id,
+      versionNumber: 1, // First version
+    };
 
-    if (error.message?.includes("API key")) {
+    return NextResponse.json(response);
+
+  } catch (error: any) {
+    console.error('Error generating post:', error);
+
+    if (error.message?.includes('API key')) {
       return NextResponse.json(
-        { error: "API configuration error", message: "GEMINI_API_KEY not configured" },
+        { error: 'API configuration error', message: 'GEMINI_API_KEY not configured' },
         { status: 500 }
-      )
+      );
     }
 
-    if (error.message?.includes("quota")) {
+    if (error.message?.includes('quota')) {
       return NextResponse.json(
         { error: error.message },
         { status: 429 }
-      )
+      );
     }
 
     return NextResponse.json(
       {
-        error: "Failed to generate post",
-        message: error.message || "An unexpected error occurred",
+        error: 'Failed to generate post',
+        message: error.message || 'An unexpected error occurred',
       },
       { status: 500 }
-    )
+    );
   }
-}
-
-/**
- * Calculate engagement score
- */
-function calculateEngagementScore(content: string, hashtags: string): number {
-  let score = 50
-  const wordCount = content.split(/\s+/).length
-  if (wordCount >= 150 && wordCount <= 300) score += 20
-  else if (wordCount >= 100 && wordCount <= 400) score += 10
-
-  const charCount = content.length
-  if (charCount <= 3000) score += 10
-
-  const lineBreaks = (content.match(/\n/g) || []).length
-  if (lineBreaks >= 3) score += 10
-  else if (lineBreaks >= 1) score += 5
-
-  const hashtagCount = (hashtags.match(/#\w+/g) || []).length
-  if (hashtagCount >= 3 && hashtagCount <= 5) score += 10
-
-  const questionMarks = (content.match(/\?/g) || []).length
-  if (questionMarks >= 1) score += 5
-
-  const ctaWords = ["comment", "share", "thoughts", "experience", "opinion", "agree", "disagree", "let me know"]
-  const hasCTA = ctaWords.some((word) => content.toLowerCase().includes(word))
-  if (hasCTA) score += 5
-
-  return Math.min(score, 100)
-}
-
-/**
- * Get engagement potential description
- */
-function getEngagementPotential(score: number): string {
-  if (score >= 80) return "Excellent - High engagement potential"
-  if (score >= 60) return "Good - Solid engagement potential"
-  if (score >= 40) return "Fair - Moderate engagement potential"
-  return "Needs improvement - Low engagement potential"
 }
