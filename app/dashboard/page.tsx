@@ -19,33 +19,12 @@ import { usePerformanceMonitoring } from "@/hooks/use-performance"
 import { AuthGuard } from "@/components/auth/auth-guard"
 import { useAuth } from "@/hooks/use-auth"
 import { OnboardingDialog } from "@/components/onboarding/onboarding-dialog"
-
-interface DashboardStats {
-  postsGenerated: number
-  avgEngagementScore: number
-  savedDrafts: number
-  totalEngagements: number
-}
-
-interface EngagementData {
-  date: string
-  posts: number
-  engagement: number
-}
-
-interface ToneData {
-  tone: string
-  count: number
-  percentage: number
-}
-
-interface PostHistory {
-  id: string
-  topic: string
-  tone: string
-  createdAt: string
-  status: string
-}
+import type {
+  DashboardStats,
+  EngagementDataPoint,
+  ToneDistribution,
+  PostHistory
+} from "@/lib/dashboard-data"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -57,8 +36,8 @@ export default function DashboardPage() {
     savedDrafts: 0,
     totalEngagements: 0,
   })
-  const [engagementData, setEngagementData] = useState<EngagementData[]>([])
-  const [toneDistribution, setToneDistribution] = useState<ToneData[]>([])
+  const [engagementData, setEngagementData] = useState<EngagementDataPoint[]>([])
+  const [toneDistribution, setToneDistribution] = useState<ToneDistribution[]>([])
   const [posts, setPosts] = useState<PostHistory[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -86,8 +65,8 @@ export default function DashboardPage() {
         const data = await response.json()
         setStats(data.stats)
 
-        // Transform engagement data to match chart format
-        const transformedEngagement = (data.engagementData || []).map((item: any) => ({
+        // Transform engagement data to match EngagementDataPoint format
+        const transformedEngagement: EngagementDataPoint[] = (data.engagementData || []).map((item: any) => ({
           date: new Date(item.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
           score: item.engagement || 0,
           posts: item.posts || 0,
@@ -97,12 +76,14 @@ export default function DashboardPage() {
         setToneDistribution(data.toneDistribution || [])
 
         // Transform posts to match PostHistory interface
-        const transformedPosts = (data.recentPosts || []).map((post: any) => ({
+        const transformedPosts: PostHistory[] = (data.recentPosts || []).map((post: any) => ({
           id: post.id,
-          topic: post.topic,
+          topic: post.topic || post.content?.substring(0, 50) || 'Untitled Post',
           tone: post.tone,
-          createdAt: post.createdAt,
-          status: "published",
+          engagementScore: post.engagement_score || 0,
+          generatedAt: post.created_at || post.createdAt,
+          status: (post.status || "published") as "published" | "draft" | "archived",
+          hashtags: post.hashtags || "",
         }))
         setPosts(transformedPosts)
       }

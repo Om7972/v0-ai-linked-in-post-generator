@@ -31,7 +31,10 @@ export default function LoginPage() {
       }
 
       await login(email, password)
-      router.push("/dashboard")
+
+      // Always redirect to onboarding page
+      // The onboarding page will check if user has completed it and redirect to dashboard if needed
+      router.push("/onboarding")
     } catch (err: any) {
       setError(err.message || "Login failed. Please try again.")
       setIsLoading(false)

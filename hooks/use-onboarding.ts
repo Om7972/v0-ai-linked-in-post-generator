@@ -1,16 +1,20 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useAuth } from "./use-auth"
 
 interface OnboardingState {
   hasSeenOnboarding: boolean
   currentStep: number
   completedSteps: string[]
+  lastShown?: string
+  userId?: string
 }
 
-const ONBOARDING_KEY = "onboarding-state"
+const ONBOARDING_KEY_PREFIX = "onboarding-state"
 
 export function useOnboarding() {
+  const { user } = useAuth()
   const [state, setState] = useState<OnboardingState>({
     hasSeenOnboarding: false,
     currentStep: 0,
@@ -19,23 +23,64 @@ export function useOnboarding() {
 
   const [isLoaded, setIsLoaded] = useState(false)
 
+  // Get user-specific storage key
+  const getStorageKey = () => {
+    return user?.id ? `${ONBOARDING_KEY_PREFIX}-${user.id}` : ONBOARDING_KEY_PREFIX
+  }
+
   // Load from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(ONBOARDING_KEY)
+    if (!user) {
+      setIsLoaded(true)
+      return
+    }
+
+    const storageKey = getStorageKey()
+    const stored = localStorage.getItem(storageKey)
+
     if (stored) {
       try {
-        setState(JSON.parse(stored))
+        const parsedState = JSON.parse(stored)
+        // Check if this is the same user
+        if (parsedState.userId === user.id) {
+          setState(parsedState)
+        } else {
+          // Different user, reset onboarding
+          setState({
+            hasSeenOnboarding: false,
+            currentStep: 0,
+            completedSteps: [],
+            userId: user.id,
+          })
+        }
       } catch {
         // Fall back to default if parsing fails
+        setState({
+          hasSeenOnboarding: false,
+          currentStep: 0,
+          completedSteps: [],
+          userId: user.id,
+        })
       }
+    } else {
+      // No stored state, this is a new user or first time
+      setState({
+        hasSeenOnboarding: false,
+        currentStep: 0,
+        completedSteps: [],
+        userId: user.id,
+      })
     }
+
     setIsLoaded(true)
-  }, [])
+  }, [user?.id])
 
   const updateState = (newState: Partial<OnboardingState>) => {
-    const updated = { ...state, ...newState }
+    const updated = { ...state, ...newState, userId: user?.id }
     setState(updated)
-    localStorage.setItem(ONBOARDING_KEY, JSON.stringify(updated))
+    if (user?.id) {
+      localStorage.setItem(getStorageKey(), JSON.stringify(updated))
+    }
   }
 
   const nextStep = () => {
@@ -55,6 +100,7 @@ export function useOnboarding() {
     updateState({
       hasSeenOnboarding: true,
       currentStep: 0,
+      lastShown: new Date().toISOString(),
     })
   }
 
@@ -66,6 +112,20 @@ export function useOnboarding() {
     })
   }
 
+  const shouldShowOnboarding = () => {
+    // Don't show if user is not loaded
+    if (!user || !isLoaded) {
+      return false
+    }
+
+    // Show if user has never seen it
+    if (!state.hasSeenOnboarding) {
+      return true
+    }
+
+    return false
+  }
+
   return {
     ...state,
     isLoaded,
@@ -74,5 +134,6 @@ export function useOnboarding() {
     skipOnboarding,
     resetOnboarding,
     updateState,
+    shouldShowOnboarding: shouldShowOnboarding(),
   }
 }

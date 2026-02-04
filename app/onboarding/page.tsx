@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,6 +9,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { CheckCircle2, Zap, Target, Users } from "lucide-react"
+import { useOnboarding } from "@/hooks/use-onboarding"
+import { useAuth } from "@/hooks/use-auth"
 
 const steps = [
   {
@@ -30,6 +32,8 @@ const steps = [
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const { user, isLoading: authLoading } = useAuth()
+  const onboarding = useOnboarding()
   const [currentStep, setCurrentStep] = useState(1)
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -37,6 +41,20 @@ export default function OnboardingPage() {
     audience: "",
     style: "professional",
   })
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/auth/login")
+    }
+  }, [user, authLoading, router])
+
+  // Redirect if already completed onboarding
+  useEffect(() => {
+    if (onboarding.isLoaded && onboarding.hasSeenOnboarding) {
+      router.push("/dashboard")
+    }
+  }, [onboarding.isLoaded, onboarding.hasSeenOnboarding, router])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -58,17 +76,23 @@ export default function OnboardingPage() {
   const handleComplete = async () => {
     setIsLoading(true)
     try {
-      // Simulate saving onboarding data
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
+      // Save user preferences
       localStorage.setItem("userPreferences", JSON.stringify(formData))
-      localStorage.setItem("hasCompletedOnboarding", "true")
 
+      // Mark onboarding as complete
+      onboarding.skipOnboarding()
+
+      // Redirect to dashboard
       router.push("/dashboard")
     } catch (err) {
       console.error("Error completing onboarding:", err)
       setIsLoading(false)
     }
+  }
+
+  const handleSkip = () => {
+    onboarding.skipOnboarding()
+    router.push("/dashboard")
   }
 
   const step = steps[currentStep - 1]
@@ -82,13 +106,12 @@ export default function OnboardingPage() {
             {steps.map((_, index) => (
               <motion.div
                 key={index}
-                className={`h-2 flex-1 rounded-full ${
-                  index < currentStep
-                    ? "bg-blue-600"
-                    : index === currentStep - 1
-                      ? "bg-blue-400"
-                      : "bg-gray-300 dark:bg-gray-700"
-                }`}
+                className={`h-2 flex-1 rounded-full ${index < currentStep
+                  ? "bg-blue-600"
+                  : index === currentStep - 1
+                    ? "bg-blue-400"
+                    : "bg-gray-300 dark:bg-gray-700"
+                  }`}
                 initial={{ width: 0 }}
                 animate={{ width: "100%" }}
                 transition={{ duration: 0.5 }}
@@ -233,11 +256,10 @@ export default function OnboardingPage() {
         <div className="text-center mt-6">
           <Button
             variant="ghost"
-            asChild
-            onClick={() => router.push("/dashboard")}
+            onClick={handleSkip}
             className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
           >
-            <Link href="/dashboard">Skip for now</Link>
+            Skip for now
           </Button>
         </div>
       </div>
