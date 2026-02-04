@@ -1,278 +1,225 @@
-/**
- * Enhanced Generate Post API
- * Production-ready with all SaaS features:
- * - Usage limits & tracking
- * - AI response caching
- * - Template system
- * - Version history
- * - Hashtag intelligence
- * - Engagement scoring
- */
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import { generateLinkedInPost, generateHashtags } from "@/lib/ai-service";
+import { UsageService } from "@/lib/services/usage-service";
+import { CacheService } from "@/lib/services/cache-service";
+import { TemplateService } from "@/lib/services/template-service";
+import { VersionService } from "@/lib/services/version-service";
+import { HashtagService } from "@/lib/services/hashtag-service";
+import { EngagementScoreEngine } from "@/lib/services/engagement-service";
+import { PlanId } from "@/types/database";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { generateLinkedInPost, generateHashtags } from '@/lib/ai-service';
-import { UsageService } from '@/lib/services/usage-service';
-import { CacheService } from '@/lib/services/cache-service';
-import { TemplateService } from '@/lib/services/template-service';
-import { HashtagService } from '@/lib/services/hashtag-service';
-import { EngagementScoreEngine } from '@/lib/services/engagement-service';
-import { WritingStyleService } from '@/lib/services/writing-style-service';
-import type { GeneratePostRequest, GeneratePostResponse } from '@/types/database';
+export const maxDuration = 60; // Increased timeout for complex AI operations
 
-export const maxDuration = 30;
+interface GenerateRequest {
+  topic: string;
+  audience: string;
+  tone: string;
+  length: string;
+  cta: string;
+  postId?: string; // If provided, this is a regeneration/refinement
+  templateId?: string; // Optional template override
+  customStyle?: string; // Optional personal style instruction
+}
 
 export async function POST(req: NextRequest) {
-  const supabase = createServerSupabaseClient();
-
   try {
-    // 1. AUTHENTICATION
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Missing authorization header' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // 2. PARSE REQUEST
-    const body: GeneratePostRequest = await req.json();
-    const { topic, audience, tone, length, cta, templateId, teamId } = body;
-
-    // Validate input
-    if (!topic || !audience || !tone || !length || !cta) {
-      return NextResponse.json(
-        { error: 'Missing required fields: topic, audience, tone, length, cta' },
-        { status: 400 }
-      );
-    }
-
-    // 3. CHECK USAGE LIMITS
-    const usageCheck = await UsageService.checkLimit(user.id);
-
-    if (!usageCheck.can_generate) {
-      return NextResponse.json(
-        {
-          error: 'Usage limit reached',
-          message: usageCheck.reason,
-          usage: {
-            daily: {
-              used: usageCheck.daily_used,
-              limit: usageCheck.daily_limit,
-            },
-            monthly: {
-              used: usageCheck.monthly_used,
-              limit: usageCheck.monthly_limit,
-            },
-          },
+    // 1. Authenticate User
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) { return cookieStore.get(name)?.value },
         },
-        { status: 429 }
-      );
-    }
-
-    // 4. GET PLAN LIMITS
-    const planLimits = await UsageService.getPlanLimits(user.id);
-
-    // 5. MAP FRONTEND VALUES TO BACKEND ENUMS
-    const toneMap: Record<string, 'professional' | 'founder' | 'influencer' | 'casual'> = {
-      'Professional': 'professional',
-      'Founder': 'founder',
-      'Influencer': 'influencer',
-      'Casual': 'casual',
-    };
-
-    const lengthMap: Record<string, 'short' | 'medium' | 'long'> = {
-      'Short (100-150 words)': 'short',
-      'Medium (200-300 words)': 'medium',
-      'Long (350-500 words)': 'long',
-    };
-
-    const mappedTone = toneMap[tone] || 'professional';
-    const mappedLength = lengthMap[length] || 'medium';
-
-    // 6. CHECK CACHE (if plan allows)
-    let cachedResponse = null;
-    let isCached = false;
-
-    if (planLimits.can_use_ai_cache) {
-      cachedResponse = await CacheService.get({
-        topic,
-        tone: mappedTone,
-        audience,
-        length: mappedLength,
-        cta,
-        templateId,
-      });
-
-      if (cachedResponse) {
-        isCached = true;
-        console.log('✅ Cache hit - using cached response');
       }
-    }
-
-    let postContent: string;
-    let hashtagsText: string;
-    let aiUsage: { promptTokens: number; completionTokens: number; totalTokens: number } = {
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0
-    };
-
-    if (isCached && cachedResponse) {
-      // Use cached response
-      postContent = cachedResponse.content;
-      hashtagsText = cachedResponse.hashtags || '';
-    } else {
-      // 7. GENERATE NEW CONTENT
-
-      // Get template if specified
-      let template = null;
-      if (templateId && planLimits.can_use_templates) {
-        template = await TemplateService.getTemplateById(templateId);
-      }
-
-      // Generate post using AI
-      const generatedPost = await generateLinkedInPost({
-        topic,
-        audience,
-        tone: mappedTone,
-        length: mappedLength,
-        cta,
-      });
-
-      if (!generatedPost.content) {
-        return NextResponse.json(
-          { error: 'Failed to generate post content' },
-          { status: 500 }
-        );
-      }
-
-      postContent = generatedPost.content;
-      aiUsage = generatedPost.usage || aiUsage;
-
-      // Generate hashtags
-      hashtagsText = await generateHashtags(postContent);
-
-      // Cache the response (if plan allows)
-      if (planLimits.can_use_ai_cache) {
-        await CacheService.set(
-          {
-            topic,
-            tone: mappedTone,
-            audience,
-            length: mappedLength,
-            cta,
-            templateId,
-          },
-          {
-            content: postContent,
-            hashtags: hashtagsText,
-            engagement_score: null, // Will be calculated below
-          }
-        );
-      }
-    }
-
-    // 8. ANALYZE HASHTAGS
-    const hashtagAnalysis = HashtagService.analyzeHashtags(
-      hashtagsText,
-      postContent,
-      planLimits.hashtag_limit
     );
 
-    // Limit hashtags based on plan
-    const limitedHashtags = hashtagAnalysis
-      .slice(0, planLimits.hashtag_limit)
-      .map(h => h.tag)
-      .join(' ');
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    // 9. CALCULATE ENGAGEMENT SCORE
-    const engagementAnalysis = EngagementScoreEngine.calculate({
-      content: postContent,
-      hashtags: limitedHashtags,
+    if (authError || !user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const { topic, audience, tone, length, cta, postId, templateId, customStyle }: GenerateRequest = body;
+
+    // Validate Base Input
+    if (!topic || !audience || !tone || !length || !cta) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    // 2. Check Usage Limits
+    // UsageService.checkLimit is static and creates its own client
+    const usageLimit = await UsageService.checkLimit(user.id);
+    if (!usageLimit.can_generate) {
+      return NextResponse.json({
+        error: usageLimit.reason || "Daily generation limit reached",
+        upgrade: true,
+        details: usageLimit
+      }, { status: 429 });
+    }
+
+    // 3. Check Cache (Optimization)
+    // Only use cache if we aren't explicitly regenerating an existing post
+    if (!postId) {
+      const cached = await CacheService.get({
+        topic, tone, audience, length, cta, templateId
+      });
+
+      if (cached) {
+        // Return cached response
+        return NextResponse.json({
+          content: cached.content,
+          hashtags: cached.hashtags,
+          engagement: {
+            score: cached.engagement_score || 0,
+            potential: "Cached result",
+            breakdown: {} // Cached result might not have full breakdown unless stored
+          },
+          isCached: true,
+          remainingCredits: usageLimit.daily_limit - usageLimit.daily_used
+        });
+      }
+    }
+
+    // 4. Resolve Template (if strict template ID provided)
+    let promptInstruction = "";
+    if (templateId) {
+      const template = await TemplateService.getTemplateById(templateId);
+      if (template) {
+        promptInstruction = `Use structure: ${template.user_prompt_template}`;
+      }
+    }
+
+    // Add custom style if provided
+    if (customStyle) {
+      promptInstruction += ` ${customStyle}`;
+    }
+
+    // 5. Generate Content with AI
+    // We combine the base generation logic here
+    const generatedPost = await generateLinkedInPost({
+      topic,
+      audience,
+      tone: (promptInstruction ? `${tone} (${promptInstruction})` : tone) as any,
+      length: length as any,
+      cta
     });
 
-    // 10. SAVE TO DATABASE
-    const { data: post, error: postError } = await supabase
-      .from('posts')
-      .insert({
-        user_id: user.id,
-        topic,
-        tone: mappedTone,
-        audience,
-        length: mappedLength,
+    const postContent = generatedPost.content;
+
+    // 6. Generate Intelligent Hashtags
+    // We fetch more hashtags than needed to categorize them
+    // Simulate plan limit of 20 hashtags for now (pro plan)
+    const rawHashtags = await generateHashtags(postContent);
+    // HashtagService expects a string of hashtags, generateHashtags returns string[] or string depending on implementation.
+    // Let's check generateHashtags return type via usage. It seems to return string[].
+    const analyzedHashtags = HashtagService.analyzeHashtags(
+      Array.isArray(rawHashtags) ? rawHashtags.join(' ') : rawHashtags,
+      postContent,
+      20
+    );
+
+    // Select best hashtags based on plan
+    const nicheTags = analyzedHashtags.filter(h => h.category === 'niche').map(h => h.tag).slice(0, 5);
+    const trendingTags = analyzedHashtags.filter(h => h.category === 'trending').map(h => h.tag).slice(0, 2);
+    const broadTags = analyzedHashtags.filter(h => h.category === 'broad').map(h => h.tag).slice(0, 3);
+
+    const optimizedHashtags = [...nicheTags, ...trendingTags, ...broadTags];
+
+    // 7. Calculate Engagement Score
+    const engagementResult = EngagementScoreEngine.calculate({
+      content: postContent,
+      hashtags: optimizedHashtags.join(' '),
+      hasCTA: !!cta,
+      hasEmojis: (postContent.match(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu) || []).length > 0
+    });
+
+    // 8. Persist to Database (Version Control)
+    let activePostId = postId;
+    let versionId: string | undefined;
+
+    if (activePostId) {
+      // Update existing post - Trigger will auto-create version
+      const { data: updatedPost, error: updateError } = await supabase
+        .from('posts')
+        .update({
+          content: postContent,
+          hashtags: optimizedHashtags.join(' '),
+          engagement_score: engagementResult.score,
+          metadata: {
+            score_breakdown: engagementResult.factors,
+            prompt_instruction: promptInstruction
+          }
+        })
+        .eq('id', activePostId)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      // We need to fetch the new version ID if we want to return it
+      // But for now, returning the postId is main priority.
+      // Optionally we could query the latest version.
+    } else {
+      // Create NEW post
+      const { data: newPost, error: insertError } = await supabase
+        .from('posts')
+        .insert({
+          user_id: user.id,
+          content: postContent,
+          topic,
+          tone, // Store original enum
+          audience,
+          length,
+          hashtags: optimizedHashtags.join(' '),
+          engagement_score: engagementResult.score,
+          metadata: {
+            score_breakdown: engagementResult.factors,
+            prompt_instruction: promptInstruction
+          }
+        })
+        .select()
+        .single();
+
+      if (!insertError && newPost) {
+        activePostId = newPost.id;
+      }
+    }
+
+    // 9. Update Usage & Cache
+    await Promise.all([
+      UsageService.incrementUsage(user.id),
+      !postId && CacheService.set({
+        topic, tone, audience, length, cta, templateId
+      }, {
         content: postContent,
-        hashtags: limitedHashtags,
-        engagement_score: engagementAnalysis.score,
-        team_id: teamId || null,
-        template_id: templateId || null,
-        is_cached: isCached,
-        cache_hit: isCached,
+        hashtags: optimizedHashtags.join(' '),
+        engagement_score: engagementResult.score
       })
-      .select()
-      .single();
+    ]);
 
-    if (postError) {
-      console.error('Error saving post:', postError);
-      throw postError;
-    }
-
-    // 11. STORE HASHTAG INTELLIGENCE
-    await HashtagService.storeHashtagIntelligence(post.id, hashtagAnalysis);
-
-    // 12. INCREMENT USAGE (only if not cached)
-    if (!isCached) {
-      await UsageService.incrementUsage(user.id);
-    }
-
-    // 13. RETURN RESPONSE
-    const response: GeneratePostResponse = {
-      post: postContent,
-      hashtags: limitedHashtags,
+    // 10. Return Response
+    return NextResponse.json({
+      content: postContent,
+      hashtags: optimizedHashtags.join(' '),
+      postId: activePostId,
+      versionId,
       engagement: {
-        score: engagementAnalysis.score,
-        potential: engagementAnalysis.potential,
+        score: engagementResult.score,
+        potential: engagementResult.potential,
+        breakdown: engagementResult.factors
       },
-      usage: aiUsage,
-      cached: isCached,
-      postId: post.id,
-      versionNumber: 1, // First version
-    };
+      remainingCredits: usageLimit.daily_limit - usageLimit.daily_used - 1
+    });
 
-    return NextResponse.json(response);
-
-  } catch (error: any) {
-    console.error('Error generating post:', error);
-
-    if (error.message?.includes('API key')) {
-      return NextResponse.json(
-        { error: 'API configuration error', message: 'GEMINI_API_KEY not configured' },
-        { status: 500 }
-      );
-    }
-
-    if (error.message?.includes('quota')) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 429 }
-      );
-    }
-
+  } catch (error) {
+    console.error("API Error:", error);
     return NextResponse.json(
-      {
-        error: 'Failed to generate post',
-        message: error.message || 'An unexpected error occurred',
-      },
+      { error: "Failed to generate post", details: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
     );
   }

@@ -4,7 +4,6 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { Sidebar } from "@/components/dashboard/sidebar"
-import { UserDropdown } from "@/components/dashboard/user-dropdown"
 import { Bell, Search, Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -70,9 +69,6 @@ export default function DashboardLayout({
                 <Bell className="h-5 w-5" />
                 <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
               </Button>
-
-              {/* User dropdown */}
-              <UserDropdown />
             </div>
           </div>
         </header>

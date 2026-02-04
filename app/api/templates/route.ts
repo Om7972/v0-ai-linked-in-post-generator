@@ -1,108 +1,66 @@
-/**
- * Templates API
- * Manage prompt templates
- */
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import { TemplateService } from "@/lib/services/template-service";
+import { TemplateRole } from "@/types/database";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { TemplateService } from '@/lib/services/template-service';
-import type { CreateTemplateRequest } from '@/types/database';
-
-// GET /api/templates - Get all templates
 export async function GET(req: NextRequest) {
-    const supabase = createServerSupabaseClient();
-
     try {
-        // Authentication
-        const authHeader = req.headers.get('authorization');
-        if (!authHeader) {
-            return NextResponse.json(
-                { error: 'Missing authorization header' },
-                { status: 401 }
-            );
-        }
-
-        const token = authHeader.replace('Bearer ', '');
-        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-        if (authError || !user) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
-
-        // Get all active templates
-        const templates = await TemplateService.getActiveTemplates();
-
-        // Get user's custom templates
-        const userTemplates = await TemplateService.getUserTemplates(user.id);
-
-        return NextResponse.json({
-            templates,
-            userTemplates,
-        });
-
-    } catch (error: any) {
-        console.error('Error getting templates:', error);
-        return NextResponse.json(
-            { error: 'Failed to get templates', message: error.message },
-            { status: 500 }
+        const cookieStore = cookies();
+        const supabase = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
         );
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+        const searchParams = req.nextUrl.searchParams;
+        const role = searchParams.get('role');
+
+        let templates = [];
+        if (role) {
+            templates = await TemplateService.getTemplatesByRole(role as TemplateRole);
+        } else {
+            templates = await TemplateService.getActiveTemplates();
+        }
+
+        // Also fetch user's custom templates
+        const customTemplates = await TemplateService.getUserTemplates(user.id);
+
+        return NextResponse.json({ templates: [...templates, ...customTemplates] });
+    } catch (error) {
+        console.error("Templates API Error:", error);
+        return NextResponse.json({ error: "Failed to fetch templates" }, { status: 500 });
     }
 }
 
-// POST /api/templates - Create custom template
 export async function POST(req: NextRequest) {
-    const supabase = createServerSupabaseClient();
-
     try {
-        // Authentication
-        const authHeader = req.headers.get('authorization');
-        if (!authHeader) {
-            return NextResponse.json(
-                { error: 'Missing authorization header' },
-                { status: 401 }
-            );
-        }
+        const cookieStore = cookies();
+        const supabase = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
+        );
 
-        const token = authHeader.replace('Bearer ', '');
-        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-        if (authError || !user) {
-            return NextResponse.json(
-                { error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
+        const body = await req.json();
+        const { name, systemPrompt, userPromptTemplate, description } = body;
 
-        // Parse request
-        const body: CreateTemplateRequest = await req.json();
-        const { name, description, systemPrompt, userPromptTemplate } = body;
-
-        // Validate
-        if (!name || !systemPrompt || !userPromptTemplate) {
-            return NextResponse.json(
-                { error: 'Missing required fields: name, systemPrompt, userPromptTemplate' },
-                { status: 400 }
-            );
-        }
-
-        // Create template
         const template = await TemplateService.createCustomTemplate(user.id, {
             name,
-            description,
-            systemPrompt,
-            userPromptTemplate,
+            systemPrompt: systemPrompt || "You are a professional assistant.",
+            userPromptTemplate: userPromptTemplate, // Map structure to userPromptTemplate
+            description
         });
 
-        return NextResponse.json(template);
-
-    } catch (error: any) {
-        console.error('Error creating template:', error);
-        return NextResponse.json(
-            { error: 'Failed to create template', message: error.message },
-            { status: 500 }
-        );
+        return NextResponse.json({ template });
+    } catch (error) {
+        console.error("Create Template API Error:", error);
+        return NextResponse.json({ error: "Failed to create template" }, { status: 500 });
     }
 }

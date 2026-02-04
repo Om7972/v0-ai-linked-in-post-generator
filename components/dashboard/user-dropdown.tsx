@@ -53,7 +53,7 @@ export function UserDropdown() {
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64" sideOffset={10}>
+      <DropdownMenuContent align="end" className="w-64 z-[100]" sideOffset={10}>
         <DropdownMenuLabel className="p-2">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">

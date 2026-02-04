@@ -1,52 +1,25 @@
-/**
- * Usage API
- * Get current usage stats and limits
- */
-
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { UsageService } from '@/lib/services/usage-service';
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+import { UsageService } from "@/lib/services/usage-service";
 
 export async function GET(req: NextRequest) {
-  const supabase = createServerSupabaseClient();
-
   try {
-    // Authentication
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Missing authorization header' },
-        { status: 401 }
-      );
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Get usage stats
-    const stats = await UsageService.getUsageStats(user.id);
-
-    // Check if can generate
-    const limitCheck = await UsageService.checkLimit(user.id);
-
-    return NextResponse.json({
-      ...stats,
-      canGenerate: limitCheck.can_generate,
-      reason: limitCheck.reason,
-    });
-
-  } catch (error: any) {
-    console.error('Error getting usage:', error);
-    return NextResponse.json(
-      { error: 'Failed to get usage', message: error.message },
-      { status: 500 }
+    const cookieStore = cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { get(name: string) { return cookieStore.get(name)?.value } } }
     );
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const usage = await UsageService.getUsageStats(user.id);
+
+    return NextResponse.json(usage);
+  } catch (error) {
+    console.error("Usage API Error:", error);
+    return NextResponse.json({ error: "Failed to fetch usage" }, { status: 500 });
   }
 }

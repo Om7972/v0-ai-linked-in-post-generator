@@ -3,57 +3,37 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Logo } from "./logo"
-import { NavLink } from "./nav-link"
 import { ThemeToggle } from "./theme-toggle"
 import { MobileNav } from "./mobile-nav"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
-import type { LucideIcon } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import { UserDropdown } from "@/components/dashboard/user-dropdown"
-import { LayoutDashboard, Zap, Settings, BarChart3, FileText, Sparkles, Users, LogIn, UserPlus, Rocket } from "lucide-react"
-
-// Navigation items with icons and active states
-const navItems: Array<{ label: string; href: string; icon: LucideIcon; isApp: boolean }> = [
-  { label: "Generator", href: "/generate", icon: Zap, isApp: true },
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, isApp: true },
-  { label: "Posts", href: "/dashboard/posts", icon: FileText, isApp: true },
-  { label: "Power-User", href: "/power-user", icon: Sparkles, isApp: true },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings, isApp: true },
-  { label: "Pricing", href: "/pricing", icon: BarChart3, isApp: false },
-]
-
-// Landing page nav items - includes all features for easy access
-const landingNavItems: Array<{ label: string; href: string; icon?: LucideIcon }> = [
-  { label: "Features", href: "#features" },
-  { label: "How It Works", href: "#how-it-works" },
-  { label: "Generate", href: "/generate", icon: Zap },
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Power-User", href: "/power-user", icon: Sparkles },
-  { label: "Onboarding", href: "/onboarding", icon: Rocket },
-  { label: "Pricing", href: "/pricing", icon: BarChart3 },
-]
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
+import { ChevronDown, Zap, DollarSign, FileText, Info, BookOpen, Mail, Shield, FileCheck, Cookie } from "lucide-react"
 
 /**
- * Header / Navbar Component
+ * Header / Navbar Component with Dropdown Menus
+ * - Product, Company, and Legal dropdowns
  * - Sticky positioning with scroll shadow
- * - Adaptive navigation (landing vs app pages)
  * - Glassmorphism design
  * - Responsive mobile drawer
- * - Icons for app navigation
- * - Active route highlighting
  */
 export function Header() {
   const pathname = usePathname()
   const [hasScrolled, setHasScrolled] = useState(false)
   const { isAuthenticated } = useAuth()
-  
+
   // Determine if we're on an app page (authenticated area)
   const isAppPage = pathname.startsWith("/dashboard") || pathname === "/generate" || pathname === "/power-user"
-  
-  // Use appropriate nav items based on page context
-  const activeNavItems = isAppPage ? navItems : landingNavItems
 
   // Detect scroll for shadow effect
   useEffect(() => {
@@ -83,38 +63,170 @@ export function Header() {
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-1">
-          {activeNavItems.map((item) => {
-            const isActive = pathname === item.href
-            const Icon = "icon" in item ? (item.icon as LucideIcon) : null
-            const isAnchorLink = item.href.startsWith("#")
-            
-            const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-              if (isAnchorLink) {
-                e.preventDefault()
-                const element = document.querySelector(item.href)
-                if (element) {
-                  element.scrollIntoView({ behavior: "smooth", block: "start" })
-                }
-              }
-            }
-            
-            return (
+          {!isAppPage && (
+            <>
+              {/* Show Generate and Power User for authenticated users */}
+              {isAuthenticated && (
+                <>
+                  <Link
+                    href="/generate"
+                    className="px-3 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-900/50"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Generate
+                  </Link>
+                  <Link
+                    href="/power-user"
+                    className="px-3 py-2 rounded-lg font-medium text-sm transition-colors text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-900/50"
+                  >
+                    Power User
+                  </Link>
+                </>
+              )}
+
+              {/* Product Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="gap-1 px-3 py-2 h-auto font-medium text-sm">
+                    Product
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56 z-[100]">
+                  <DropdownMenuLabel>Explore Features</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <Link href="/#features">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Zap className="h-4 w-4 mr-2 text-blue-500" />
+                      <div>
+                        <p className="font-medium">Features</p>
+                        <p className="text-xs text-muted-foreground">AI-powered capabilities</p>
+                      </div>
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/pricing">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <DollarSign className="h-4 w-4 mr-2 text-green-500" />
+                      <div>
+                        <p className="font-medium">Pricing</p>
+                        <p className="text-xs text-muted-foreground">Plans for every need</p>
+                      </div>
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/#how-it-works">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <FileText className="h-4 w-4 mr-2 text-purple-500" />
+                      <div>
+                        <p className="font-medium">Examples</p>
+                        <p className="text-xs text-muted-foreground">See it in action</p>
+                      </div>
+                    </DropdownMenuItem>
+                  </Link>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Company Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="gap-1 px-3 py-2 h-auto font-medium text-sm">
+                    Company
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56 z-[100]">
+                  <DropdownMenuLabel>About Us</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <Link href="/about">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Info className="h-4 w-4 mr-2 text-blue-500" />
+                      <div>
+                        <p className="font-medium">About</p>
+                        <p className="text-xs text-muted-foreground">Our mission & story</p>
+                      </div>
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/blog">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <BookOpen className="h-4 w-4 mr-2 text-orange-500" />
+                      <div>
+                        <p className="font-medium">Blog</p>
+                        <p className="text-xs text-muted-foreground">Latest insights</p>
+                      </div>
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/contact">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Mail className="h-4 w-4 mr-2 text-green-500" />
+                      <div>
+                        <p className="font-medium">Contact</p>
+                        <p className="text-xs text-muted-foreground">Get in touch</p>
+                      </div>
+                    </DropdownMenuItem>
+                  </Link>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Legal Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="gap-1 px-3 py-2 h-auto font-medium text-sm">
+                    Legal
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56 z-[100]">
+                  <DropdownMenuLabel>Legal Information</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <Link href="/privacy">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Shield className="h-4 w-4 mr-2 text-blue-500" />
+                      <span>Privacy Policy</span>
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/terms">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <FileCheck className="h-4 w-4 mr-2 text-purple-500" />
+                      <span>Terms of Service</span>
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/cookies">
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Cookie className="h-4 w-4 mr-2 text-orange-500" />
+                      <span>Cookie Policy</span>
+                    </DropdownMenuItem>
+                  </Link>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
+
+          {isAppPage && (
+            <>
               <Link
-                key={item.label}
-                href={item.href}
-                onClick={handleClick}
+                href="/generate"
                 className={cn(
                   "px-3 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors",
-                  isActive
+                  pathname === "/generate"
                     ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
                     : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-900/50"
                 )}
               >
-                {Icon && <Icon className="w-4 h-4" />}
-                {item.label}
+                <Zap className="w-4 h-4" />
+                Generator
               </Link>
-            )
-          })}
+              <Link
+                href="/dashboard"
+                className={cn(
+                  "px-3 py-2 rounded-lg font-medium text-sm transition-colors",
+                  pathname === "/dashboard"
+                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                    : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-900/50"
+                )}
+              >
+                Dashboard
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Right side actions */}
@@ -143,7 +255,7 @@ export function Header() {
           </div>
 
           {/* Mobile menu */}
-          <MobileNav navItems={activeNavItems} isAppPage={isAppPage} />
+          <MobileNav isAppPage={isAppPage} />
         </div>
       </nav>
     </header>

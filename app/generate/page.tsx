@@ -20,10 +20,12 @@ import {
   VersionHistory,
   TeamCollaboration,
   CommandPalette,
+  PersonalStyle,
 } from "@/components/power-user"
 import { useDraftAutoSave } from "@/hooks/use-draft-auto-save"
 import { useAuth } from "@/hooks/use-auth"
 import { useRouter } from "next/navigation"
+import { OnboardingDialog } from "@/components/onboarding/onboarding-dialog"
 
 interface GeneratedContent {
   post: string
@@ -34,6 +36,8 @@ interface GeneratedContent {
     breakdown: Record<string, number>
   }
   tone: string
+  postId?: string
+  versionId?: string
 }
 
 export default function GeneratePage() {
@@ -45,6 +49,7 @@ export default function GeneratePage() {
     null
   )
   const [formData, setFormData] = useState<GeneratorFormData | null>(null)
+  const [customStyle, setCustomStyle] = useState<string>("")
   const { toast } = useToast()
 
   // Draft auto-save - must be called before any conditional returns
@@ -123,7 +128,7 @@ export default function GeneratePage() {
     setFormData(data)
 
     try {
-      const response = await fetch("/api/generate", {
+      const response = await fetch("/api/generate-post", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -135,6 +140,7 @@ export default function GeneratePage() {
           tone: data.tone,
           length: data.length,
           cta: data.cta,
+          customStyle: customStyle // Send custom style separately
         }),
       })
 
@@ -162,10 +168,12 @@ export default function GeneratePage() {
       }
 
       setGeneratedContent({
-        post: result.post,
+        post: result.content,
         hashtags,
         engagement,
         tone: data.tone,
+        postId: result.postId,
+        versionId: result.versionId,
       })
 
       toast({
@@ -174,7 +182,7 @@ export default function GeneratePage() {
       })
     } catch (error: any) {
       console.error("Error generating post:", error)
-      
+
       // Handle authentication errors specifically
       if (error.message === "Unauthorized" || error.message.includes("profile not found")) {
         toast({
@@ -185,7 +193,7 @@ export default function GeneratePage() {
         router.push("/auth/login")
         return
       }
-      
+
       toast({
         title: "Error",
         description: error.message || "Failed to generate post. Please try again.",
@@ -202,7 +210,7 @@ export default function GeneratePage() {
     setIsRegenerating(true)
 
     try {
-      const response = await fetch("/api/generate", {
+      const response = await fetch("/api/generate-post", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -214,6 +222,8 @@ export default function GeneratePage() {
           tone: formData.tone,
           length: formData.length,
           cta: formData.cta,
+          customStyle: customStyle,
+          postId: generatedContent.postId // Pass ID for version history
         }),
       })
 
@@ -227,10 +237,17 @@ export default function GeneratePage() {
       setGeneratedContent((prev) =>
         prev
           ? {
-              ...prev,
-              post: result.post,
-              hashtags: result.hashtags || prev.hashtags,
+            ...prev,
+            post: result.content,
+            hashtags: result.hashtags || prev.hashtags,
+            postId: result.postId,
+            versionId: result.versionId,
+            engagement: {
+              score: result.engagement?.score || prev.engagement.score,
+              potential: result.engagement?.potential || prev.engagement.potential,
+              breakdown: result.engagement?.breakdown || prev.engagement.breakdown
             }
+          }
           : null
       )
 
@@ -256,7 +273,7 @@ export default function GeneratePage() {
     setIsRegenerating(true)
 
     try {
-      const response = await fetch("/api/generate/refine", {
+      const response = await fetch("/api/refine-post", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -266,6 +283,7 @@ export default function GeneratePage() {
           currentPost: generatedContent.post,
           refinementType,
           customInstruction,
+          postId: generatedContent.postId
         }),
       })
 
@@ -279,9 +297,11 @@ export default function GeneratePage() {
       setGeneratedContent((prev) =>
         prev
           ? {
-              ...prev,
-              post: result.refinedPost,
-            }
+            ...prev,
+            post: result.refinedPost,
+            postId: result.postId || prev.postId,
+            versionId: result.versionId
+          }
           : null
       )
 
@@ -321,9 +341,9 @@ export default function GeneratePage() {
     setGeneratedContent((prev) =>
       prev
         ? {
-            ...prev,
-            hashtags: `${prev.hashtags}\n${hashtagString}`,
-          }
+          ...prev,
+          hashtags: `${prev.hashtags}\n${hashtagString}`,
+        }
         : null
     )
     toast({
@@ -387,6 +407,9 @@ export default function GeneratePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Onboarding Dialog */}
+      <OnboardingDialog />
+
       {/* Command Palette */}
       <CommandPalette onAction={handleCommandPaletteAction} />
 
@@ -474,6 +497,10 @@ export default function GeneratePage() {
               <div className="flex flex-wrap gap-2 justify-between items-center bg-secondary/30 p-4 rounded-lg border border-border/50">
                 <div className="flex flex-wrap gap-2">
                   <TemplateLibrary onSelectTemplate={handleLoadTemplate} />
+                  <PersonalStyle onSelectStyle={(style) => {
+                    setCustomStyle(style);
+                    toast({ title: "Style Applied", description: "Your personal writing style will be used for the next generation." });
+                  }} />
                   <ViralAnalyzer content={generatedContent.post} />
                   <HashtagIntelligence
                     topic={formData?.topic || ""}

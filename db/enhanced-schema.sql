@@ -262,7 +262,8 @@ ALTER TABLE public.posts
   ADD COLUMN IF NOT EXISTS team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES public.prompt_templates(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS is_cached BOOLEAN NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS cache_hit BOOLEAN NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS cache_hit BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
 
 -- Index for team posts
 CREATE INDEX IF NOT EXISTS idx_posts_team_id ON public.posts(team_id);

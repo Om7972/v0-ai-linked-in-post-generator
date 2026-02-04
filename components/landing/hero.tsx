@@ -95,7 +95,7 @@ export function Hero() {
           variants={itemVariants}
           className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16"
         >
-          <Link href="/app">
+          <Link href="/generate">
             <Button
               size="lg"
               className="relative group bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border-0 h-12 px-8 text-base font-semibold"

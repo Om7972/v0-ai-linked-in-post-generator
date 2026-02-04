@@ -26,6 +26,10 @@ export async function GET(req: NextRequest) {
       .eq("user_id", user.id)
       .single()
 
+    if (usageError) {
+      console.error("Usage error:", usageError)
+    }
+
     // Get posts
     const { data: posts, error: postsError } = await supabase
       .from("posts")
@@ -48,15 +52,15 @@ export async function GET(req: NextRequest) {
     if (draftsError) {
       console.error("Drafts error:", draftsError)
     }
-    
-    // Calculate stats
+
+    // Calculate stats with safe defaults
     const stats = {
-      postsGenerated: postsList.length,
+      postsGenerated: postsList.length || 0,
       avgEngagementScore: postsList.length > 0
         ? Math.round(postsList.reduce((sum, p) => sum + (p.engagement_score || 0), 0) / postsList.length)
         : 0,
       savedDrafts: draftsCount || 0,
-      totalEngagements: postsList.length * 150, // Mock data
+      totalEngagements: (postsList.length || 0) * 150, // Mock data
     }
 
     // Calculate engagement data (last 7 days)
