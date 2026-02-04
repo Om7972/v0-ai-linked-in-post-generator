@@ -32,6 +32,7 @@ export interface GeneratePostParams {
   length: "short" | "medium" | "long"
   cta: string
   grounding?: boolean // Use Google Search grounding
+  personalStylePrompt?: string // Personal writing style additions
 }
 
 export interface GeneratedPost {
@@ -50,7 +51,7 @@ export async function generateLinkedInPost(
   params: GeneratePostParams
 ): Promise<GeneratedPost> {
   try {
-    const model = genAI.getGenerativeModel({ 
+    const model = genAI.getGenerativeModel({
       model: MODEL_NAME,
       // Temporarily disable safety settings for debugging
       // safetySettings: [
@@ -75,7 +76,7 @@ export async function generateLinkedInPost(
 
     // Get prompt template based on tone
     const promptTemplate = getPromptTemplate(params.tone)
-    
+
     // Build the full prompt
     const prompt = promptTemplate
       .replace("{{TOPIC}}", params.topic)
@@ -91,14 +92,14 @@ export async function generateLinkedInPost(
       maxOutputTokens: 1000, // Increased token limit for longer content
       stopSequences: []
     }
-    
+
     console.log("Generating content with parameters:", {
       topic: params.topic,
       tone: params.tone,
       length: params.length,
       promptLength: prompt.length
     })
-    
+
     // Generate content
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -106,7 +107,7 @@ export async function generateLinkedInPost(
     })
     const response = result.response
     const text = response.text()
-    
+
     console.log("Generated content length:", text.length, "characters")
     console.log("Generated content word count:", text.split(/\s+/).length, "words")
 
@@ -130,24 +131,24 @@ export async function generateLinkedInPost(
       code: error.code,
       status: error.status
     })
-    
+
     // Handle specific error types
     if (error.message?.includes("API key") || error.message?.includes("AUTHENTICATION_FAILED")) {
       throw new Error("Invalid Gemini API key")
     }
-    
+
     if (error.message?.includes("quota") || error.message?.includes("RATE_LIMIT")) {
       throw new Error("Gemini API quota exceeded")
     }
-    
+
     if (error.message?.includes("safety") || error.message?.includes("SAFETY")) {
       throw new Error("Content was blocked by safety filters")
     }
-    
+
     if (error.message?.includes("INVALID_ARGUMENT")) {
       throw new Error("Invalid request parameters")
     }
-    
+
     throw new Error(`Failed to generate post: ${error.message || "Unknown error"}`)
   }
 }

@@ -28,7 +28,7 @@ export function createServerSupabaseClient() {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY is required for server operations")
   }
 
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  return createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -74,7 +74,7 @@ export async function createServerSupabaseClientWithSession() {
  */
 export function createSupabaseClientFromToken(authToken: string) {
   // Create a client with the user's token
-  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  const client = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
     global: {
       headers: {
         Authorization: `Bearer ${authToken}`,
@@ -89,7 +89,7 @@ export function createSupabaseClientFromToken(authToken: string) {
  * Use this in client components
  */
 export function createClientSupabaseClient() {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  return createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
     auth: {
       autoRefreshToken: true,
       persistSession: true,

@@ -17,6 +17,7 @@ import { CacheService } from '@/lib/services/cache-service';
 import { TemplateService } from '@/lib/services/template-service';
 import { HashtagService } from '@/lib/services/hashtag-service';
 import { EngagementScoreEngine } from '@/lib/services/engagement-service';
+import { WritingStyleService } from '@/lib/services/writing-style-service';
 import type { GeneratePostRequest, GeneratePostResponse } from '@/types/database';
 
 export const maxDuration = 30;
