@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "./use-auth"
+import { onboardingSteps } from "@/lib/onboarding-data"
 
 interface OnboardingState {
   hasSeenOnboarding: boolean
@@ -84,10 +85,22 @@ export function useOnboarding() {
   }
 
   const nextStep = () => {
-    updateState({
-      currentStep: state.currentStep + 1,
-      completedSteps: [...state.completedSteps, `step-${state.currentStep}`],
-    })
+    const nextStepIndex = state.currentStep + 1
+
+    // If we've reached the end, mark as complete
+    if (nextStepIndex >= onboardingSteps.length) {
+      updateState({
+        hasSeenOnboarding: true,
+        currentStep: 0,
+        completedSteps: [...state.completedSteps, `step-${state.currentStep}`],
+        lastShown: new Date().toISOString(),
+      })
+    } else {
+      updateState({
+        currentStep: nextStepIndex,
+        completedSteps: [...state.completedSteps, `step-${state.currentStep}`],
+      })
+    }
   }
 
   const previousStep = () => {

@@ -3,7 +3,7 @@
  * Handles usage tracking and limit enforcement
  */
 
-import { createServerSupabaseClient } from './supabase';
+import { createServerSupabaseClient } from '../supabase';
 import type { UsageLimitCheck, PlanId } from '@/types/database';
 
 export class UsageService {

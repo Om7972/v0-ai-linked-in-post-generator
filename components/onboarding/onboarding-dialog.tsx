@@ -26,6 +26,11 @@ export function OnboardingDialog() {
     return null
   }
 
+  // Safety check: ensure currentStep is within bounds
+  if (onboarding.currentStep < 0 || onboarding.currentStep >= onboardingSteps.length) {
+    return null
+  }
+
   const isWelcomeStep = onboarding.currentStep === 0
   const currentStep = onboardingSteps[onboarding.currentStep]
   const isLastStep = onboarding.currentStep === onboardingSteps.length - 1
