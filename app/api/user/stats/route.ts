@@ -8,23 +8,23 @@ export async function GET(req: NextRequest) {
     const user = await requireAuth()
     const supabase = createServerSupabaseClient()
 
-    // Get user profile to check plan
+    // Get user profile to check plan (safe fetch)
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("plan")
       .eq("id", user.id)
-      .single()
+      .maybeSingle()
 
     if (profileError) {
       console.error("Profile error:", profileError)
     }
 
-    // Get usage stats
+    // Get usage stats (safe fetch)
     const { data: usage, error: usageError } = await supabase
       .from("usage")
       .select("*")
       .eq("user_id", user.id)
-      .single()
+      .maybeSingle()
 
     if (usageError) {
       console.error("Usage error:", usageError)

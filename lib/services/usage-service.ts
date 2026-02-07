@@ -54,48 +54,70 @@ export class UsageService {
         const supabase = createServerSupabaseClient();
 
         try {
-            // Get usage data
+            // Get usage data (safe fetch)
             const { data: usage, error: usageError } = await supabase
                 .from('usage')
                 .select('*')
                 .eq('user_id', userId)
-                .single();
+                .maybeSingle();
 
             if (usageError) throw usageError;
 
-            // Get plan limits
+            // Get profile plan (safe fetch)
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')
                 .select('plan')
                 .eq('id', userId)
-                .single();
+                .maybeSingle();
 
             if (profileError) throw profileError;
 
-            const { data: plan, error: planError } = await supabase
+            // Default values if records are missing
+            const planId = profile?.plan || 'free';
+            const currentUsage = usage || {
+                posts_generated_today: 0,
+                posts_generated_this_month: 0,
+                total_posts_generated: 0
+            };
+
+            // Get plan limits (safe fetch)
+            let { data: plan, error: planError } = await supabase
                 .from('plans')
                 .select('daily_post_limit, monthly_post_limit')
-                .eq('id', profile.plan)
-                .single();
+                .eq('id', planId)
+                .maybeSingle();
 
-            if (planError) throw planError;
+            if (planError && planError.code !== 'PGRST116') throw planError;
+
+            // Fallback limits for free plan if plan not found
+            if (!plan) {
+                plan = {
+                    daily_post_limit: 5,
+                    monthly_post_limit: 15
+                };
+            }
 
             return {
                 daily: {
-                    used: usage.posts_generated_today,
+                    used: currentUsage.posts_generated_today || 0,
                     limit: plan.daily_post_limit,
-                    remaining: Math.max(0, plan.daily_post_limit - usage.posts_generated_today),
+                    remaining: Math.max(0, plan.daily_post_limit - (currentUsage.posts_generated_today || 0)),
                 },
                 monthly: {
-                    used: usage.posts_generated_this_month,
+                    used: currentUsage.posts_generated_this_month || 0,
                     limit: plan.monthly_post_limit,
-                    remaining: Math.max(0, plan.monthly_post_limit - usage.posts_generated_this_month),
+                    remaining: Math.max(0, plan.monthly_post_limit - (currentUsage.posts_generated_this_month || 0)),
                 },
-                total: usage.total_posts_generated,
+                total: currentUsage.total_posts_generated || 0,
             };
         } catch (error) {
             console.error('Error getting usage stats:', error);
-            throw new Error('Failed to get usage stats');
+            // Return safe default structure instead of crashing
+            return {
+                daily: { used: 0, limit: 5, remaining: 5 },
+                monthly: { used: 0, limit: 15, remaining: 15 },
+                total: 0
+            };
         }
     }
 
@@ -110,22 +132,42 @@ export class UsageService {
                 .from('profiles')
                 .select('plan')
                 .eq('id', userId)
-                .single();
+                .maybeSingle();
 
             if (profileError) throw profileError;
 
-            const { data: plan, error: planError } = await supabase
+            const planId = profile?.plan || 'free';
+
+            let { data: plan, error: planError } = await supabase
                 .from('plans')
                 .select('*')
-                .eq('id', profile.plan)
-                .single();
+                .eq('id', planId)
+                .maybeSingle();
 
-            if (planError) throw planError;
+            if (planError && planError.code !== 'PGRST116') throw planError;
+
+            if (!plan) {
+                // Return default free plan structure if missing
+                return {
+                    id: 'free',
+                    name: 'Free',
+                    daily_post_limit: 5,
+                    monthly_post_limit: 15,
+                    price: 0
+                };
+            }
 
             return plan;
         } catch (error) {
             console.error('Error getting plan limits:', error);
-            throw new Error('Failed to get plan limits');
+            // Return safe default
+            return {
+                id: 'free',
+                name: 'Free',
+                daily_post_limit: 5,
+                monthly_post_limit: 15,
+                price: 0
+            };
         }
     }
 }

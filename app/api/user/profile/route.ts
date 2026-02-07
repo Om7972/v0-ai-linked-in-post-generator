@@ -13,23 +13,27 @@ export async function GET(req: NextRequest) {
       .from("profiles")
       .select("*")
       .eq("id", user.id)
-      .single()
+      .maybeSingle()
 
     if (profileError) {
       console.error("Profile error:", profileError)
-      return NextResponse.json(
-        { error: "Profile not found" },
-        { status: 404 }
-      )
+      // Don't error out, just return minimal user info from auth
+    }
+
+    // Default values if profile record is missing
+    const userProfile = profile || {
+      name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+      plan: 'free',
+      created_at: new Date().toISOString(),
     }
 
     return NextResponse.json({
       user: {
         id: user.id,
-        name: profile.name,
+        name: userProfile.name,
         email: user.email,
-        plan: profile.plan,
-        createdAt: profile.created_at,
+        plan: userProfile.plan,
+        createdAt: userProfile.created_at,
       },
     })
   } catch (error: any) {
@@ -49,14 +53,16 @@ export async function PATCH(req: NextRequest) {
 
     const { name } = await req.json()
 
-    // Update profile in Supabase
-    const updateData: any = {}
+    // Update profile in Supabase (upsert to handle missing records)
+    const updateData: any = {
+      id: user.id, // Ensure ID is present for upsert
+      updated_at: new Date().toISOString()
+    }
     if (name) updateData.name = name
 
     const { data: profile, error: updateError } = await supabase
       .from("profiles")
-      .update(updateData)
-      .eq("id", user.id)
+      .upsert(updateData)
       .select()
       .single()
 
@@ -73,7 +79,7 @@ export async function PATCH(req: NextRequest) {
         id: user.id,
         name: profile.name,
         email: user.email,
-        plan: profile.plan,
+        plan: profile.plan || 'free',
         createdAt: profile.created_at,
       },
     })
