@@ -19,7 +19,7 @@ export * from "./scroll-area"
 export * from "./avatar"
 
 // Enhanced components
-export * from "./button-enhanced"
+
 export * from "./animated-empty-state"
 export * from "./animated-toast"
 export * from "./skeleton-enhanced"
