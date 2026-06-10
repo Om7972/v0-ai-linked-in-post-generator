@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { generateLinkedInPost, generateHashtags } from "@/lib/ai-service";
 import { UsageService } from "@/lib/services/usage-service";
 import { CacheService } from "@/lib/services/cache-service";
@@ -26,22 +24,17 @@ interface GenerateRequest {
 export async function POST(req: NextRequest) {
   try {
     // 1. Authenticate User
-    const cookieStore = cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) { return cookieStore.get(name)?.value },
-        },
-      }
-    );
+    const { getCurrentUserFromRequest } = await import("@/lib/auth");
+    const { createServerSupabaseClient } = await import("@/lib/supabase");
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const user = await getCurrentUserFromRequest();
 
-    if (authError || !user) {
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Create supabase client for database operations
+    const supabase = createServerSupabaseClient();
 
     const body = await req.json();
     const { topic, audience, tone, length, cta, postId, templateId, customStyle }: GenerateRequest = body;

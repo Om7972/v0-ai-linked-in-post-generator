@@ -1,9 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ArrowLeft, Sparkles, Linkedin } from "lucide-react"
+import { ArrowLeft, Sparkles, Linkedin, Eye, EyeOff, Wand2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -12,6 +14,8 @@ import {
 } from "@/components/generate/generator-form"
 import { PostResult } from "@/components/generate/post-result"
 import { PostSkeleton, FormSkeleton } from "@/components/generate/skeleton-loaders"
+import { LivePreview } from "@/components/generate/live-preview"
+import { HookGenerator } from "@/components/generate/hook-generator"
 import {
   TemplateLibrary,
   ViralAnalyzer,
@@ -26,6 +30,7 @@ import { useDraftAutoSave } from "@/hooks/use-draft-auto-save"
 import { useAuth } from "@/hooks/use-auth"
 import { useRouter } from "next/navigation"
 import { OnboardingDialog } from "@/components/onboarding/onboarding-dialog"
+import { motion, AnimatePresence } from "framer-motion"
 
 interface GeneratedContent {
   post: string
@@ -45,14 +50,14 @@ export default function GeneratePage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [isRegenerating, setIsRegenerating] = useState(false)
-  const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(
-    null
-  )
+  const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null)
   const [formData, setFormData] = useState<GeneratorFormData | null>(null)
   const [customStyle, setCustomStyle] = useState<string>("")
+  const [showPreview, setShowPreview] = useState(true)
+  const [activeTab, setActiveTab] = useState("editor")
   const { toast } = useToast()
 
-  // Draft auto-save - must be called before any conditional returns
+  // Draft auto-save
   const draftAutoSave = useDraftAutoSave(
     generatedContent?.post || "",
     formData?.topic || "",
@@ -60,53 +65,36 @@ export default function GeneratePage() {
     (formData?.tone as "Professional" | "Founder" | "Influencer" | "Casual") || "Professional"
   )
 
-  // Check authentication status
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
       router.push("/auth/login")
     }
   }, [isAuthenticated, authLoading, router])
 
-  // Keyboard shortcut handler
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + Enter to generate
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault()
         if (!isLoading && !generatedContent) {
-          // Focus on form submit if visible
-          const submitBtn = document.querySelector(
-            'button[type="submit"]'
-          ) as HTMLButtonElement
+          const submitBtn = document.querySelector('button[type="submit"]') as HTMLButtonElement
           submitBtn?.click()
         }
       }
-
-      // Escape to clear result
       if (e.key === "Escape" && generatedContent) {
         e.preventDefault()
         handleNewPost()
       }
-
-      // Cmd/Ctrl + C (with generated content) - copy
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "C" && generatedContent) {
         e.preventDefault()
-        navigator.clipboard.writeText(
-          `${generatedContent.post}\n\n${generatedContent.hashtags}`
-        )
-        toast({
-          title: "Copied!",
-          description: "Post copied to clipboard",
-        })
+        navigator.clipboard.writeText(`${generatedContent.post}\n\n${generatedContent.hashtags}`)
+        toast({ title: "Copied!", description: "Post copied to clipboard" })
       }
-
-      // Cmd/Ctrl + R - regenerate
       if ((e.metaKey || e.ctrlKey) && e.key === "r" && generatedContent && formData) {
         e.preventDefault()
         handleRegenerate()
       }
     }
-
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [isLoading, generatedContent, formData, toast])
@@ -119,86 +107,43 @@ export default function GeneratePage() {
     )
   }
 
-  if (!isAuthenticated) {
-    return null // Will redirect via useEffect
-  }
+  if (!isAuthenticated) return null
 
   const handleGenerate = async (data: GeneratorFormData) => {
     setIsLoading(true)
     setFormData(data)
-
     try {
       const response = await fetch("/api/generate-post", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          topic: data.topic,
-          audience: data.audience,
-          tone: data.tone,
-          length: data.length,
-          cta: data.cta,
-          customStyle: customStyle // Send custom style separately
+          topic: data.topic, audience: data.audience, tone: data.tone,
+          length: data.length, cta: data.cta, customStyle
         }),
       })
-
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || "Failed to generate post")
       }
-
       const result = await response.json()
-
-      // Generate hashtags
-      let hashtags = result.hashtags || ""
-
-      // Calculate engagement score
-      const engagement = {
-        score: result.engagement?.score || 75,
-        potential: result.engagement?.potential || "Good - Solid engagement potential",
-        breakdown: {
-          "Optimal Length": 15,
-          "Clear CTA": 15,
-          "Visual Breaks": 15,
-          "Hashtag Usage": hashtags ? 10 : 0,
-          "Emoji Usage": data.includeEmoji ? 10 : 0,
-        },
-      }
-
       setGeneratedContent({
         post: result.content,
-        hashtags,
-        engagement,
-        tone: data.tone,
-        postId: result.postId,
-        versionId: result.versionId,
+        hashtags: result.hashtags || "",
+        engagement: {
+          score: result.engagement?.score || 75,
+          potential: result.engagement?.potential || "Good",
+          breakdown: result.engagement?.breakdown || {},
+        },
+        tone: data.tone, postId: result.postId, versionId: result.versionId,
       })
-
-      toast({
-        title: "Post Generated!",
-        description: "Your LinkedIn post is ready. Review and customize it below.",
-      })
+      toast({ title: "✨ Post Generated!", description: "Your LinkedIn post is ready." })
     } catch (error: any) {
-      console.error("Error generating post:", error)
-
-      // Handle authentication errors specifically
       if (error.message === "Unauthorized" || error.message.includes("profile not found")) {
-        toast({
-          title: "Authentication Required",
-          description: "Please log in to generate posts.",
-          variant: "destructive",
-        })
+        toast({ title: "Auth Required", description: "Please log in.", variant: "destructive" })
         router.push("/auth/login")
         return
       }
-
-      toast({
-        title: "Error",
-        description: error.message || "Failed to generate post. Please try again.",
-        variant: "destructive",
-      })
+      toast({ title: "Error", description: error.message || "Failed to generate post.", variant: "destructive" })
     } finally {
       setIsLoading(false)
     }
@@ -206,62 +151,27 @@ export default function GeneratePage() {
 
   const handleRegenerate = async () => {
     if (!formData || !generatedContent) return
-
     setIsRegenerating(true)
-
     try {
       const response = await fetch("/api/generate-post", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          topic: formData.topic,
-          audience: formData.audience,
-          tone: formData.tone,
-          length: formData.length,
-          cta: formData.cta,
-          customStyle: customStyle,
-          postId: generatedContent.postId // Pass ID for version history
+          topic: formData.topic, audience: formData.audience, tone: formData.tone,
+          length: formData.length, cta: formData.cta, customStyle,
+          postId: generatedContent.postId,
         }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to regenerate post")
-      }
-
+      if (!response.ok) throw new Error((await response.json()).error || "Failed")
       const result = await response.json()
-
-      setGeneratedContent((prev) =>
-        prev
-          ? {
-            ...prev,
-            post: result.content,
-            hashtags: result.hashtags || prev.hashtags,
-            postId: result.postId,
-            versionId: result.versionId,
-            engagement: {
-              score: result.engagement?.score || prev.engagement.score,
-              potential: result.engagement?.potential || prev.engagement.potential,
-              breakdown: result.engagement?.breakdown || prev.engagement.breakdown
-            }
-          }
-          : null
-      )
-
-      toast({
-        title: "Regenerated!",
-        description: "New post generated with the same settings.",
-      })
+      setGeneratedContent((prev) => prev ? {
+        ...prev, post: result.content, hashtags: result.hashtags || prev.hashtags,
+        postId: result.postId, versionId: result.versionId,
+        engagement: { score: result.engagement?.score || prev.engagement.score, potential: result.engagement?.potential || prev.engagement.potential, breakdown: result.engagement?.breakdown || prev.engagement.breakdown }
+      } : null)
+      toast({ title: "Regenerated!", description: "New version generated." })
     } catch (error: any) {
-      console.error("Error regenerating post:", error)
-      toast({
-        title: "Error",
-        description: error.message || "Failed to regenerate post. Please try again.",
-        variant: "destructive",
-      })
+      toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
       setIsRegenerating(false)
     }
@@ -269,53 +179,19 @@ export default function GeneratePage() {
 
   const handleRefinePost = async (refinementType: string, customInstruction?: string) => {
     if (!generatedContent || !token) return
-
     setIsRegenerating(true)
-
     try {
       const response = await fetch("/api/refine-post", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          currentPost: generatedContent.post,
-          refinementType,
-          customInstruction,
-          postId: generatedContent.postId
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ currentPost: generatedContent.post, refinementType, customInstruction, postId: generatedContent.postId }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to refine post")
-      }
-
+      if (!response.ok) throw new Error((await response.json()).error || "Failed")
       const result = await response.json()
-
-      setGeneratedContent((prev) =>
-        prev
-          ? {
-            ...prev,
-            post: result.refinedPost,
-            postId: result.postId || prev.postId,
-            versionId: result.versionId
-          }
-          : null
-      )
-
-      toast({
-        title: "Post refined!",
-        description: "Your post has been refined successfully.",
-      })
+      setGeneratedContent((prev) => prev ? { ...prev, post: result.refinedPost, postId: result.postId || prev.postId, versionId: result.versionId } : null)
+      toast({ title: "Post refined!", description: "Successfully refined." })
     } catch (error: any) {
-      console.error("Error refining post:", error)
-      toast({
-        title: "Error",
-        description: error.message || "Failed to refine post. Please try again.",
-        variant: "destructive",
-      })
+      toast({ title: "Error", description: error.message, variant: "destructive" })
     } finally {
       setIsRegenerating(false)
     }
@@ -328,214 +204,203 @@ export default function GeneratePage() {
   }
 
   const handleLoadTemplate = (template: any) => {
-    setFormData((prev) => ({
-      ...prev,
-      topic: template.name,
-      tone: template.suggestedTone as GeneratorFormData["tone"],
-    } as GeneratorFormData))
+    setFormData((prev) => ({ ...prev, topic: template.name, tone: template.suggestedTone } as GeneratorFormData))
   }
 
   const handleAddHashtags = (hashtags: string[]) => {
     if (!generatedContent) return
-    const hashtagString = hashtags.join(" ")
-    setGeneratedContent((prev) =>
-      prev
-        ? {
-          ...prev,
-          hashtags: `${prev.hashtags}\n${hashtagString}`,
-        }
-        : null
-    )
-    toast({
-      title: "Hashtags added",
-      description: "Smart hashtags have been added to your post",
-    })
+    setGeneratedContent((prev) => prev ? { ...prev, hashtags: `${prev.hashtags}\n${hashtags.join(" ")}` } : null)
+    toast({ title: "Hashtags added", description: "Smart hashtags added to your post" })
   }
 
-  const handleCommandPaletteAction = (action: string) => {
-    const clickElement = (selector: string) => {
-      const element = document.querySelector(selector) as HTMLElement | null
-      if (element) {
-        element.click()
-      }
-    }
-
-    switch (action) {
-      case "open-templates":
-        clickElement('[data-command-templates]')
-        break
-      case "open-viral-analyzer":
-        clickElement('[data-command-viral]')
-        break
-      case "open-hashtag-intelligence":
-        clickElement('[data-command-hashtags]')
-        break
-      case "open-scheduler":
-        clickElement('[data-command-schedule]')
-        break
-      case "open-history":
-        clickElement('[data-command-history]')
-        break
-      case "open-team":
-        clickElement('[data-command-team]')
-        break
-      default:
-        break
+  const handleHookSelect = (hook: string) => {
+    if (generatedContent) {
+      setGeneratedContent(prev => prev ? { ...prev, post: `${hook}\n\n${prev.post}` } : null)
     }
   }
 
   const handleDownload = () => {
     if (!generatedContent) return
-
     const content = `${generatedContent.post}\n\n${generatedContent.hashtags}`
-    const element = document.createElement("a")
-    element.setAttribute(
-      "href",
-      `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`
-    )
-    element.setAttribute("download", "linkedin-post.txt")
-    element.style.display = "none"
-    document.body.appendChild(element)
-    element.click()
-    document.body.removeChild(element)
+    const el = document.createElement("a")
+    el.setAttribute("href", `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`)
+    el.setAttribute("download", "linkedin-post.txt")
+    el.style.display = "none"
+    document.body.appendChild(el)
+    el.click()
+    document.body.removeChild(el)
+    toast({ title: "Downloaded!", description: "Post saved as TXT file." })
+  }
 
-    toast({
-      title: "Downloaded!",
-      description: "Post saved as TXT file.",
-    })
+  const handleCommandPaletteAction = (action: string) => {
+    const clickElement = (selector: string) => {
+      (document.querySelector(selector) as HTMLElement)?.click()
+    }
+    const actions: Record<string, string> = {
+      "open-templates": "[data-command-templates]",
+      "open-viral-analyzer": "[data-command-viral]",
+      "open-hashtag-intelligence": "[data-command-hashtags]",
+      "open-scheduler": "[data-command-schedule]",
+      "open-history": "[data-command-history]",
+      "open-team": "[data-command-team]",
+    }
+    if (actions[action]) clickElement(actions[action])
   }
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Onboarding Dialog */}
       <OnboardingDialog />
-
-      {/* Command Palette */}
       <CommandPalette onAction={handleCommandPaletteAction} />
 
       <div className="container mx-auto px-4 py-8">
         {/* Navigation */}
         <div className="mb-8 flex items-center justify-between">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
-          >
+          <Link href="/dashboard" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group">
             <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-            Back to Home
+            Back to Dashboard
           </Link>
-
-          {/* Auto-save indicator */}
-          {draftAutoSave.lastSaved && (
-            <div className="text-xs text-muted-foreground flex items-center gap-1">
-              <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-              Draft saved
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {draftAutoSave.lastSaved && (
+              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                Draft saved
+              </div>
+            )}
+            {generatedContent && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPreview(!showPreview)}
+                className="gap-2"
+              >
+                {showPreview ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showPreview ? "Hide" : "Show"} Preview
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-6">
-            <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 group">
-              <Linkedin className="h-8 w-8 text-primary group-hover:animate-bounce" />
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-10"
+        >
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/20">
+              <Linkedin className="h-8 w-8 text-blue-500" />
             </div>
-            <Sparkles className="h-6 w-6 text-primary animate-pulse" />
+            <Sparkles className="h-6 w-6 text-yellow-500 animate-pulse" />
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-balance mb-4">
+          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-clip-text text-transparent mb-3">
             Generate LinkedIn Posts
           </h1>
-          <p className="text-lg text-muted-foreground text-balance max-w-2xl mx-auto">
-            Create engaging, AI-powered LinkedIn posts tailored to your audience.
-            Customize every aspect and publish with confidence.
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            Create engaging, AI-powered posts tailored to your audience with real-time preview
           </p>
-
-          {/* Keyboard Shortcuts Hint */}
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <kbd className="px-2 py-1 rounded bg-secondary border border-border">
-                ⌘K
-              </kbd>
-              <span>Commands</span>
-            </div>
-            <div className="w-px h-4 bg-border" />
-            <div className="flex items-center gap-1">
-              <kbd className="px-2 py-1 rounded bg-secondary border border-border">
-                ⌘/Ctrl
-              </kbd>
-              <kbd className="px-2 py-1 rounded bg-secondary border border-border">
-                Enter
-              </kbd>
-              <span>Generate</span>
-            </div>
-            <div className="w-px h-4 bg-border" />
-            <div className="flex items-center gap-1">
-              <kbd className="px-2 py-1 rounded bg-secondary border border-border">
-                ⌘/Ctrl
-              </kbd>
-              <kbd className="px-2 py-1 rounded bg-secondary border border-border">
-                R
-              </kbd>
-              <span>Regenerate</span>
-            </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <Badge variant="secondary" className="text-xs gap-1"><Wand2 className="h-3 w-3" /> AI-Powered</Badge>
+            <Badge variant="secondary" className="text-xs">3 AI Models</Badge>
+            <Badge variant="secondary" className="text-xs">Smart Hashtags</Badge>
           </div>
-        </div>
+
+          {/* Keyboard shortcuts */}
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
+            {[
+              { keys: "⌘K", label: "Commands" },
+              { keys: "⌘↵", label: "Generate" },
+              { keys: "⌘R", label: "Regenerate" },
+            ].map(({ keys, label }) => (
+              <div key={label} className="flex items-center gap-1">
+                <kbd className="px-1.5 py-0.5 rounded bg-secondary border border-border text-[10px]">{keys}</kbd>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
 
         {/* Main Content */}
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           {isLoading && (
-            <div className="space-y-6">
+            <div className="space-y-6 max-w-4xl mx-auto">
               <FormSkeleton />
               <PostSkeleton />
             </div>
           )}
 
-          {!isLoading && !generatedContent && <GeneratorForm onGenerate={handleGenerate} isLoading={isLoading} onReset={handleNewPost} />}
+          {!isLoading && !generatedContent && (
+            <div className="max-w-4xl mx-auto">
+              <GeneratorForm onGenerate={handleGenerate} isLoading={isLoading} onReset={handleNewPost} />
+            </div>
+          )}
 
           {!isLoading && generatedContent && (
             <div className="space-y-6">
               {/* Power-user features toolbar */}
-              <div className="flex flex-wrap gap-2 justify-between items-center bg-secondary/30 p-4 rounded-lg border border-border/50">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-wrap gap-2 justify-between items-center bg-secondary/30 p-4 rounded-xl border border-border/50 backdrop-blur-sm"
+              >
                 <div className="flex flex-wrap gap-2">
                   <TemplateLibrary onSelectTemplate={handleLoadTemplate} />
                   <PersonalStyle onSelectStyle={(style) => {
-                    setCustomStyle(style);
-                    toast({ title: "Style Applied", description: "Your personal writing style will be used for the next generation." });
+                    setCustomStyle(style)
+                    toast({ title: "Style Applied", description: "Your personal writing style will be used." })
                   }} />
+                  <HookGenerator topic={formData?.topic || ""} tone={formData?.tone || "Professional"} onSelectHook={handleHookSelect} />
                   <ViralAnalyzer content={generatedContent.post} />
-                  <HashtagIntelligence
-                    topic={formData?.topic || ""}
-                    tone={formData?.tone || "Professional"}
-                    content={generatedContent.post}
-                    onAddHashtags={handleAddHashtags}
-                  />
+                  <HashtagIntelligence topic={formData?.topic || ""} tone={formData?.tone || "Professional"} content={generatedContent.post} onAddHashtags={handleAddHashtags} />
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <SchedulingReminder />
                   <VersionHistory currentContent={generatedContent.post} />
                   <TeamCollaboration />
                 </div>
+              </motion.div>
+
+              {/* Content: Editor + Preview side-by-side */}
+              <div className={`grid gap-6 ${showPreview ? "lg:grid-cols-2" : "grid-cols-1 max-w-4xl mx-auto"}`}>
+                {/* Editor/Result */}
+                <div>
+                  <PostResult
+                    post={generatedContent.post}
+                    hashtags={generatedContent.hashtags}
+                    engagement={generatedContent.engagement}
+                    tone={generatedContent.tone}
+                    onRegenerate={handleRegenerate}
+                    onRefine={handleRefinePost}
+                    onDownload={handleDownload}
+                    onSaveDraft={handleNewPost}
+                    isRegenerating={isRegenerating}
+                  />
+                </div>
+
+                {/* Live Preview */}
+                <AnimatePresence>
+                  {showPreview && (
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      className="sticky top-24"
+                    >
+                      <div className="mb-3 flex items-center gap-2">
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium text-muted-foreground">Live Preview</span>
+                      </div>
+                      <LivePreview
+                        content={generatedContent.post}
+                        hashtags={generatedContent.hashtags}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
-              <PostResult
-                post={generatedContent.post}
-                hashtags={generatedContent.hashtags}
-                engagement={generatedContent.engagement}
-                tone={generatedContent.tone}
-                onRegenerate={handleRegenerate}
-                onRefine={handleRefinePost}
-                onDownload={handleDownload}
-                onSaveDraft={handleNewPost}
-                isRegenerating={isRegenerating}
-              />
-
               {/* New Post Button */}
-              <div className="flex justify-center">
-                <Button
-                  onClick={handleNewPost}
-                  variant="outline"
-                  size="lg"
-                  className="gap-2"
-                >
+              <div className="flex justify-center pt-4">
+                <Button onClick={handleNewPost} variant="outline" size="lg" className="gap-2">
                   <Sparkles className="h-4 w-4" />
                   Generate Another Post
                 </Button>
@@ -549,7 +414,9 @@ export default function GeneratePage() {
           <Card className="border-border/30 bg-secondary/20 backdrop-blur-sm mx-auto max-w-2xl">
             <CardContent className="pt-6">
               <p className="text-sm text-muted-foreground">
-                💡 <strong>Pro Tip:</strong> Use the engagement score as a guide. Try the viral analyzer, hashtag intelligence, and version history to optimize your posts. Press <kbd className="px-1.5 py-0.5 rounded bg-secondary text-xs font-semibold">⌘K</kbd> for quick access to all power-user features.
+                💡 <strong>Pro Tip:</strong> Use the Hook Generator to create scroll-stopping opening lines. 
+                The AI cycles through GROQ, Gemini, and HuggingFace to ensure you always get results. 
+                Press <kbd className="px-1.5 py-0.5 rounded bg-secondary text-xs font-semibold">⌘K</kbd> for quick access.
               </p>
             </CardContent>
           </Card>

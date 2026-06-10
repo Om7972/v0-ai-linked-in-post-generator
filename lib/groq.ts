@@ -15,7 +15,7 @@ if (!GROQ_API_KEY) {
 }
 
 // Initialize Groq client if API key exists
-const GROQ_MODEL = process.env.GROQ_MODEL || "llama3-70b-8192";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 const groq = GROQ_API_KEY ? new Groq({ apiKey: GROQ_API_KEY }) : null;
 
 export interface GeneratePostParams {

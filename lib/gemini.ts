@@ -16,11 +16,11 @@ if (GEMINI_API_KEY) {
 }
 
 if (!GEMINI_API_KEY) {
-  throw new Error("GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY is required")
+  console.warn("GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY is not set. Gemini fallback unavailable.")
 }
 
-// Initialize Gemini client
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY)
+// Initialize Gemini client only if key exists
+const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null
 
 // Model configuration
 const MODEL_NAME = "gemini-1.5-pro" // Correct model name that works with the API key
@@ -50,6 +50,10 @@ export interface GeneratedPost {
 export async function generateLinkedInPost(
   params: GeneratePostParams
 ): Promise<GeneratedPost> {
+  if (!genAI) {
+    throw new Error("Gemini API key is not configured")
+  }
+
   try {
     const model = genAI.getGenerativeModel({
       model: MODEL_NAME,
@@ -158,6 +162,7 @@ export async function generateLinkedInPost(
  */
 export async function generateHashtags(postContent: string): Promise<string> {
   try {
+    if (!genAI) throw new Error("Gemini API key is not configured")
     const model = genAI.getGenerativeModel({ model: MODEL_NAME })
 
     const prompt = `Analyze the following LinkedIn post and provide exactly 5 highly relevant and trending hashtags.
@@ -197,6 +202,7 @@ export async function refineLinkedInPost(
   customInstruction?: string
 ): Promise<string> {
   try {
+    if (!genAI) throw new Error("Gemini API key is not configured")
     const model = genAI.getGenerativeModel({ model: MODEL_NAME })
 
     let refinementPrompt = ""
