@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserFromRequest } from "@/lib/auth";
-import { createServerSupabaseClient } from "@/lib/supabase";
+import { createServerSupabaseClient, createSupabaseClientFromToken } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,12 +20,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = createServerSupabaseClient();
+    const authHeader = req.headers.get("authorization");
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
+    let error: any = null;
 
-    // Use admin API to update password
-    const { error } = await supabase.auth.admin.updateUserById(user.id, {
-      password: newPassword,
-    });
+    if (token) {
+      // Try updating via the user-scoped client (does not require service role key)
+      const userSupabase = createSupabaseClientFromToken(token);
+      const { error: updateError } = await userSupabase.auth.updateUser({
+        password: newPassword,
+      });
+      error = updateError;
+    } else {
+      // Fallback to service role admin API
+      const supabase = createServerSupabaseClient();
+      const { error: adminError } = await supabase.auth.admin.updateUserById(user.id, {
+        password: newPassword,
+      });
+      error = adminError;
+    }
 
     if (error) {
       console.error("Password update error:", error);

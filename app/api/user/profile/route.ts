@@ -98,8 +98,11 @@ export async function PATCH(req: NextRequest) {
 
     const { data: updatedProfile, error } = await supabase
       .from("profiles")
-      .update(updateData)
-      .eq("id", user.id)
+      .upsert({
+        id: user.id,
+        ...updateData,
+        updated_at: new Date().toISOString(),
+      })
       .select()
       .single();
 
@@ -110,9 +113,13 @@ export async function PATCH(req: NextRequest) {
 
     // Also update auth metadata if name changed
     if (name) {
-      await supabase.auth.admin.updateUserById(user.id, {
-        user_metadata: { ...user.user_metadata, name },
-      });
+      try {
+        await supabase.auth.admin.updateUserById(user.id, {
+          user_metadata: { ...user.user_metadata, name },
+        });
+      } catch (adminError) {
+        console.warn("Failed to update auth metadata (service role key might be invalid):", adminError);
+      }
     }
 
     return NextResponse.json({
