@@ -104,11 +104,33 @@ export async function generateLinkedInPost(
       promptLength: prompt.length
     })
 
-    // Generate content
-    const result = await model.generateContent({
+    // Try primary and secondary models
+    let result;
+    const modelParams = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig
-    })
+    };
+
+    try {
+      const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+      result = await model.generateContent(modelParams);
+    } catch (err: any) {
+      const errMsg = err.message || "";
+      if (errMsg.includes("not found") || errMsg.includes("404") || errMsg.includes("model") || errMsg.includes("not supported")) {
+        console.warn("[Gemini client] Model gemini-1.5-pro failed, falling back to gemini-1.5-flash...");
+        try {
+          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+          result = await model.generateContent(modelParams);
+        } catch (err2: any) {
+          console.warn("[Gemini client] Model gemini-1.5-flash failed, falling back to gemini-2.5-flash...");
+          const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+          result = await model.generateContent(modelParams);
+        }
+      } else {
+        throw err;
+      }
+    }
+
     const response = result.response
     const text = response.text()
 

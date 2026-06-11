@@ -27,12 +27,26 @@ export function getLastUsedProvider(): string {
 
 /**
  * Generate a LinkedIn post using the available AI provider
- * Priority: GROQ → Gemini → HuggingFace → Mock
+ * Priority: Gemini → GROQ → HuggingFace → Mock
  */
 export async function generateLinkedInPost(params: GeneratePostParams): Promise<GeneratedPost> {
   const errors: string[] = [];
 
-  // 1. Try GROQ first (primary - upgraded key)
+  // 1. Try Gemini first (primary)
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    try {
+      console.log("[AI Service] Attempting Gemini...");
+      const result = await geminiGenerateLinkedInPost(params);
+      lastUsedProvider = "gemini";
+      console.log("[AI Service] ✅ Gemini succeeded");
+      return result;
+    } catch (error: any) {
+      console.warn("[AI Service] ❌ Gemini failed:", error.message);
+      errors.push(`Gemini: ${error.message}`);
+    }
+  }
+
+  // 2. Try GROQ as second fallback
   if (process.env.GROQ_API_KEY) {
     try {
       console.log("[AI Service] Attempting GROQ...");
@@ -44,20 +58,6 @@ export async function generateLinkedInPost(params: GeneratePostParams): Promise<
     } catch (error: any) {
       console.warn("[AI Service] ❌ GROQ failed:", error.message);
       errors.push(`GROQ: ${error.message}`);
-    }
-  }
-
-  // 2. Try Gemini as second fallback
-  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    try {
-      console.log("[AI Service] Attempting Gemini...");
-      const result = await geminiGenerateLinkedInPost(params);
-      lastUsedProvider = "gemini";
-      console.log("[AI Service] ✅ Gemini succeeded");
-      return result;
-    } catch (error: any) {
-      console.warn("[AI Service] ❌ Gemini failed:", error.message);
-      errors.push(`Gemini: ${error.message}`);
     }
   }
 
@@ -84,25 +84,25 @@ export async function generateLinkedInPost(params: GeneratePostParams): Promise<
 
 /**
  * Generate hashtags using the available AI provider
- * Priority: GROQ → Gemini → HuggingFace → Mock
+ * Priority: Gemini → GROQ → HuggingFace → Mock
  */
 export async function generateHashtags(postContent: string): Promise<string> {
-  // 1. Try GROQ
+  // 1. Try Gemini
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    try {
+      return await geminiGenerateHashtags(postContent);
+    } catch (error: any) {
+      console.warn("[AI Service] Gemini hashtags failed:", error.message);
+    }
+  }
+
+  // 2. Try GROQ
   if (process.env.GROQ_API_KEY) {
     try {
       const { generateHashtags: groqHashtags } = await import("./groq");
       return await groqHashtags(postContent);
     } catch (error: any) {
       console.warn("[AI Service] GROQ hashtags failed:", error.message);
-    }
-  }
-
-  // 2. Try Gemini
-  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    try {
-      return await geminiGenerateHashtags(postContent);
-    } catch (error: any) {
-      console.warn("[AI Service] Gemini hashtags failed:", error.message);
     }
   }
 
@@ -122,14 +122,23 @@ export async function generateHashtags(postContent: string): Promise<string> {
 
 /**
  * Refine a LinkedIn post using the available AI provider
- * Priority: GROQ → Gemini → HuggingFace → Original
+ * Priority: Gemini → GROQ → HuggingFace → Original
  */
 export async function refineLinkedInPost(
   currentPost: string,
   refinementType: string,
   customInstruction?: string
 ): Promise<string> {
-  // 1. Try GROQ
+  // 1. Try Gemini
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    try {
+      return await geminiRefineLinkedInPost(currentPost, refinementType, customInstruction);
+    } catch (error: any) {
+      console.warn("[AI Service] Gemini refinement failed:", error.message);
+    }
+  }
+
+  // 2. Try GROQ
   if (process.env.GROQ_API_KEY) {
     try {
       const { refineLinkedInPost: groqRefine } = await import("./groq");
@@ -139,14 +148,6 @@ export async function refineLinkedInPost(
     }
   }
 
-  // 2. Try Gemini
-  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    try {
-      return await geminiRefineLinkedInPost(currentPost, refinementType, customInstruction);
-    } catch (error: any) {
-      console.warn("[AI Service] Gemini refinement failed:", error.message);
-    }
-  }
 
   // 3. Try HuggingFace
   if (process.env.HUGGING_FACE_API_KEY) {

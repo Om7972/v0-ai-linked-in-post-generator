@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 /**
  * Plans API
  * Get available subscription plans

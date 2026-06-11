@@ -98,7 +98,7 @@ export default function AnalyticsPage() {
     )
   }
 
-  const trendIcon = data.weeklyGrowth > 0 ? ArrowUp : data.weeklyGrowth < 0 ? ArrowDown : Minus
+  const TrendIcon = data.weeklyGrowth > 0 ? ArrowUp : data.weeklyGrowth < 0 ? ArrowDown : Minus
   const trendColor = data.weeklyGrowth > 0 ? "text-green-500" : data.weeklyGrowth < 0 ? "text-red-500" : "text-yellow-500"
 
   const insights = [
@@ -262,7 +262,7 @@ export default function AnalyticsPage() {
                 ))}
               </div>
               <div className="mt-4 p-3 rounded-lg bg-secondary/50 flex items-center gap-2">
-                <trendIcon className={`h-4 w-4 ${trendColor}`} />
+                <TrendIcon className={`h-4 w-4 ${trendColor}`} />
                 <span className="text-sm">
                   {data.weeklyGrowth > 0
                     ? `${data.weeklyGrowth}% improvement this week`

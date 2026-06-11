@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 const mainNavItems = [
   { label: "Dashboard", href: "/dashboard", icon: Home },
   { label: "Generate", href: "/generate", icon: Sparkles },
+  { label: "AI Brand Coach", href: "/dashboard/brand-coach", icon: Flame },
   { label: "Analytics", href: "/dashboard/analytics", icon: TrendingUp },
 ]
 

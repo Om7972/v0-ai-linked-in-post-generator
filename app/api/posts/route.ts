@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/posts - Get user's posts
  * POST /api/posts - Create a new post (manual save)

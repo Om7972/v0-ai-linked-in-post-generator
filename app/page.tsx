@@ -6,15 +6,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { LandingPage } from "@/components/landing"
 
 export default function Home() {
-  const { isAuthenticated, isLoading } = useAuth()
-  const router = useRouter()
-
-  useEffect(() => {
-    // If authenticated, redirect to dashboard
-    if (isAuthenticated && !isLoading) {
-      router.push("/dashboard")
-    }
-  }, [isAuthenticated, isLoading, router])
+  const { isLoading } = useAuth()
 
   // Show loading while checking auth
   if (isLoading) {
@@ -28,11 +20,5 @@ export default function Home() {
     )
   }
 
-  // Show landing page for unauthenticated users
-  if (!isAuthenticated) {
-    return <LandingPage />
-  }
-
-  // Brief display while redirecting to dashboard
-  return null
+  return <LandingPage />
 }

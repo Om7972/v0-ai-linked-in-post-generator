@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase';
 import { HashtagService } from '@/lib/services/hashtag-service';
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
     const supabase = createServerSupabaseClient();
 

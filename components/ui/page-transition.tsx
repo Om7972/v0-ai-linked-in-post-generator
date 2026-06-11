@@ -28,15 +28,18 @@ interface StaggerContainerProps {
   children: ReactNode
   staggerDelay?: number
   delay?: number
+  className?: string
 }
 
 export function StaggerContainer({
   children,
   staggerDelay = 0.1,
   delay = 0,
+  className,
 }: StaggerContainerProps) {
   return (
     <motion.div
+      className={className}
       initial="hidden"
       animate="visible"
       variants={{

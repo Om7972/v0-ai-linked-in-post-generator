@@ -21,7 +21,7 @@ import {
 import {
   ChevronDown, Zap, DollarSign, FileText, Info, BookOpen,
   Mail, Shield, FileCheck, Cookie, BarChart3, LayoutDashboard,
-  Sparkles, Crown, User, Settings
+  Sparkles, Crown, User, Settings, Flame
 } from "lucide-react"
 
 /**
@@ -80,8 +80,8 @@ export function Header() {
             <>
               {/* 3 Main Nav Items */}
               <NavLink href="/generate" icon={Sparkles}>Generate</NavLink>
+              <NavLink href="/dashboard/brand-coach" icon={Flame}>AI Brand Coach</NavLink>
               <NavLink href="/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
-              <NavLink href="/dashboard/analytics" icon={BarChart3}>Analytics</NavLink>
             </>
           )}
 

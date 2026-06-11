@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { generateLinkedInPost, generateHashtags } from "@/lib/ai-service";
 import { UsageService } from "@/lib/services/usage-service";

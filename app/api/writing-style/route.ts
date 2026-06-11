@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 /**
  * Writing Style API
  * Manage personal writing style profiles

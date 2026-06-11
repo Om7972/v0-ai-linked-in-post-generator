@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 /**
  * Cache Stats API
  * Get AI response cache statistics
