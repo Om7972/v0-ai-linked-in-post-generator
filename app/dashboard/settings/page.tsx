@@ -20,7 +20,7 @@ import { AuthGuard } from "@/components/auth/auth-guard"
 import { useTheme } from "next-themes"
 
 export default function SettingsPage() {
-  const { user, token } = useAuth()
+  const { user, token, updateUser } = useAuth()
   const { toast } = useToast()
   const { theme, setTheme } = useTheme()
   const [name, setName] = useState("")
@@ -67,6 +67,7 @@ export default function SettingsPage() {
         body: JSON.stringify({ name }),
       })
       if (response.ok) {
+        updateUser({ name })
         setSaveSuccess(true)
         setTimeout(() => setSaveSuccess(false), 3000)
         toast({ title: "✅ Profile updated", description: "Your profile has been updated successfully." })

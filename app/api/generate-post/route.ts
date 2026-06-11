@@ -39,12 +39,17 @@ export async function POST(req: NextRequest) {
     const supabase = createServerSupabaseClient();
 
     const body = await req.json();
-    const { topic, audience, tone, length, cta, postId, templateId, customStyle }: GenerateRequest = body;
+    const { topic, audience, tone: rawTone, length: rawLength, cta, postId, templateId, customStyle }: GenerateRequest = body;
 
-    // Validate Base Input
-    if (!topic || !audience || !tone || !length || !cta) {
+    let tone = "professional";
+    let length = "medium";
+    if (!topic || !audience || !rawTone || !rawLength || !cta) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+
+    tone = ["professional", "founder", "influencer", "casual"].includes(rawTone.toLowerCase()) ? rawTone.toLowerCase() : "professional";
+    const lenLower = rawLength.toLowerCase();
+    length = lenLower.includes("short") ? "short" : lenLower.includes("long") ? "long" : "medium";
 
     // 2. Check Usage Limits
     // UsageService.checkLimit is static and creates its own client
@@ -99,7 +104,8 @@ export async function POST(req: NextRequest) {
     const generatedPost = await generateLinkedInPost({
       topic,
       audience,
-      tone: (promptInstruction ? `${tone} (${promptInstruction})` : tone) as any,
+      tone: tone as any,
+      personalStylePrompt: promptInstruction,
       length: length as any,
       cta
     });

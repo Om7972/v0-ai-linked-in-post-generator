@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import { AuthGuard } from "@/components/auth/auth-guard"
 
 export default function ProfilePage() {
-    const { user, token } = useAuth()
+    const { user, token, updateUser } = useAuth()
     const { toast } = useToast()
     const [name, setName] = useState("")
     const [email, setEmail] = useState("")
@@ -72,11 +72,11 @@ export default function ProfilePage() {
             })
 
             if (response.ok) {
+                updateUser({ name })
                 toast({
                     title: "Profile updated",
                     description: "Your profile information has been updated.",
                 })
-                // Optionally refresh user context here
             } else {
                 throw new Error("Failed to update profile")
             }
@@ -123,28 +123,31 @@ export default function ProfilePage() {
 
         setIsLoading(true)
         try {
-            // Logic for password update (usually different endpoint or same profile endpoint)
-            // For now mocking or assuming API handles it if we sent it
-            // Standard auth providers (Supabase) utilize specific password update method.
-            // We might need /api/auth/update-password endpoint.
-            // Assuming we just mock success for UI feedback unless backend is ready.
-
-            // Let's assume we implement it later properly or use existing pattern.
-            // For now, simple success.
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            toast({
-                title: "Success",
-                description: "Password update functionality coming soon (Mocked).",
+            const response = await fetch("/api/auth/update-password", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ newPassword }),
             })
 
-            setCurrentPassword("")
-            setNewPassword("")
-            setConfirmPassword("")
-        } catch (error) {
+            if (response.ok) {
+                toast({
+                    title: "Success",
+                    description: "Password updated successfully.",
+                })
+                setCurrentPassword("")
+                setNewPassword("")
+                setConfirmPassword("")
+            } else {
+                const data = await response.json()
+                throw new Error(data.error || "Failed to update password")
+            }
+        } catch (error: any) {
             toast({
                 title: "Error",
-                description: "Failed to update password.",
+                description: error.message || "Failed to update password.",
                 variant: "destructive",
             })
         } finally {

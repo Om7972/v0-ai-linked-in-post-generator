@@ -23,7 +23,13 @@ if (!GEMINI_API_KEY) {
 const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null
 
 // Model configuration
-const MODEL_NAME = "gemini-1.5-pro" // Correct model name that works with the API key
+const modelsToTry = [
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-pro",
+  "gemini-1.5-flash"
+];
 
 export interface GeneratePostParams {
   topic: string
@@ -45,6 +51,31 @@ export interface GeneratedPost {
 }
 
 /**
+ * Sequential fallback helper for Gemini requests
+ */
+export async function generateContentWithFallback(request: any): Promise<any> {
+  if (!genAI) {
+    throw new Error("Gemini API key is not configured");
+  }
+
+  let lastError = null;
+  for (const modelName of modelsToTry) {
+    try {
+      console.log(`[Gemini client] Trying model: ${modelName}...`);
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(request);
+      console.log(`[Gemini client] Model ${modelName} succeeded!`);
+      return result;
+    } catch (err: any) {
+      console.warn(`[Gemini client] Model ${modelName} failed:`, err.message || err);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("All Gemini models failed to generate content");
+}
+
+/**
  * Generate a LinkedIn post using Gemini AI
  */
 export async function generateLinkedInPost(
@@ -55,38 +86,19 @@ export async function generateLinkedInPost(
   }
 
   try {
-    const model = genAI.getGenerativeModel({
-      model: MODEL_NAME,
-      // Temporarily disable safety settings for debugging
-      // safetySettings: [
-      //   {
-      //     category: "HARM_CATEGORY_HARASSMENT",
-      //     threshold: "BLOCK_MEDIUM_AND_ABOVE",
-      //   },
-      //   {
-      //     category: "HARM_CATEGORY_HATE_SPEECH",
-      //     threshold: "BLOCK_MEDIUM_AND_ABOVE",
-      //   },
-      //   {
-      //     category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-      //     threshold: "BLOCK_MEDIUM_AND_ABOVE",
-      //   },
-      //   {
-      //     category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-      //     threshold: "BLOCK_MEDIUM_AND_ABOVE",
-      //   },
-      // ],
-    })
-
     // Get prompt template based on tone
     const promptTemplate = getPromptTemplate(params.tone)
 
     // Build the full prompt
-    const prompt = promptTemplate
+    let prompt = promptTemplate
       .replace("{{TOPIC}}", params.topic)
       .replace("{{AUDIENCE}}", params.audience)
       .replace("{{LENGTH}}", params.length)
       .replace("{{CTA}}", params.cta)
+
+    if (params.personalStylePrompt) {
+      prompt += `\n\nWriting Style Instructions:\n${params.personalStylePrompt}`;
+    }
 
     // Enhanced generation parameters for better content quality
     const generationConfig = {
@@ -104,32 +116,12 @@ export async function generateLinkedInPost(
       promptLength: prompt.length
     })
 
-    // Try primary and secondary models
-    let result;
     const modelParams = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig
     };
 
-    try {
-      const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-      result = await model.generateContent(modelParams);
-    } catch (err: any) {
-      const errMsg = err.message || "";
-      if (errMsg.includes("not found") || errMsg.includes("404") || errMsg.includes("model") || errMsg.includes("not supported")) {
-        console.warn("[Gemini client] Model gemini-1.5-pro failed, falling back to gemini-1.5-flash...");
-        try {
-          const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-          result = await model.generateContent(modelParams);
-        } catch (err2: any) {
-          console.warn("[Gemini client] Model gemini-1.5-flash failed, falling back to gemini-2.5-flash...");
-          const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-          result = await model.generateContent(modelParams);
-        }
-      } else {
-        throw err;
-      }
-    }
+    const result = await generateContentWithFallback(modelParams);
 
     const response = result.response
     const text = response.text()
@@ -185,7 +177,6 @@ export async function generateLinkedInPost(
 export async function generateHashtags(postContent: string): Promise<string> {
   try {
     if (!genAI) throw new Error("Gemini API key is not configured")
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME })
 
     const prompt = `Analyze the following LinkedIn post and provide exactly 5 highly relevant and trending hashtags.
     
@@ -197,7 +188,7 @@ ${postContent}
 
 Hashtags:`
 
-    const result = await model.generateContent(prompt)
+    const result = await generateContentWithFallback(prompt)
     const text = result.response.text()
 
     // Clean up and extract hashtags
@@ -225,7 +216,6 @@ export async function refineLinkedInPost(
 ): Promise<string> {
   try {
     if (!genAI) throw new Error("Gemini API key is not configured")
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME })
 
     let refinementPrompt = ""
 
@@ -256,7 +246,7 @@ ${currentPost}
 
 Please provide the refined version:`
 
-    const result = await model.generateContent(prompt)
+    const result = await generateContentWithFallback(prompt)
     const text = result.response.text()
 
     return text.trim()
@@ -265,4 +255,5 @@ Please provide the refined version:`
     throw new Error(`Failed to refine post: ${error.message || "Unknown error"}`)
   }
 }
+
 

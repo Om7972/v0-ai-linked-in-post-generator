@@ -98,7 +98,11 @@ export async function POST(req: NextRequest) {
       : createServerSupabaseClient()
 
     const body = await req.json()
-    const { topic, tone, audience, length, content, hashtags } = body
+    const { topic, tone: rawTone, audience, length: rawLength, content, hashtags } = body
+
+    const tone = rawTone ? (["professional", "founder", "influencer", "casual"].includes(rawTone.toLowerCase()) ? rawTone.toLowerCase() : "professional") : "professional";
+    const lenLower = rawLength ? rawLength.toLowerCase() : "";
+    const length = lenLower.includes("short") ? "short" : lenLower.includes("long") ? "long" : "medium";
 
     // Validation
     if (!content || !topic) {

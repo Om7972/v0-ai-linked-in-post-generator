@@ -180,9 +180,9 @@ export class BrandCoachService {
         let finalNiche = customNiche || 'Technology & Professional Development';
         let finalTopics = customTopics || ['Software Engineering', 'Artificial Intelligence', 'Career Growth'];
 
-        if (genAI && hasHistory) {
+        if (hasHistory) {
             try {
-                const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+                const { generateContentWithFallback } = await import('../gemini');
                 const postSummaryText = postList.map((p, idx) => `Post ${idx+1}: Topic: ${p.topic}, Tone: ${p.tone}\nContent Summary: ${p.content.substring(0, 150)}...`).join('\n\n');
 
                 const prompt = `
@@ -215,7 +215,7 @@ Return ONLY a JSON response matching this exact structure:
 }
 `;
 
-                const result = await model.generateContent(prompt);
+                const result = await generateContentWithFallback({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7 } });
                 const responseText = result.response.text();
                 // Extract JSON block
                 const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -265,12 +265,12 @@ Return ONLY a JSON response matching this exact structure:
     static async generateWeeklyPlan(userId: string): Promise<any> {
         const profile = await this.getBrandProfile(userId);
         
-        if (!genAI) {
+        if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
             return this.getMockWeeklyPlan(profile);
         }
 
         try {
-            const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+            const { generateContentWithFallback } = await import('../gemini');
             const prompt = `
 You are a LinkedIn Growth Expert. Generate a comprehensive Weekly Content Plan (5 days, Monday to Friday) for a user with the following brand profile:
 
@@ -303,7 +303,7 @@ Format the output strictly as a JSON array of objects:
   ...
 ]
 `;
-            const result = await model.generateContent(prompt);
+            const result = await generateContentWithFallback({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7 } });
             const responseText = result.response.text();
             const jsonMatch = responseText.match(/\[[\s\S]*\]/);
             if (jsonMatch) {
@@ -325,9 +325,9 @@ Format the output strictly as a JSON array of objects:
 
         let reportData: any = null;
 
-        if (genAI) {
+        if (process.env.GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
             try {
-                const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+                const { generateContentWithFallback } = await import('../gemini');
                 const prompt = `
 You are a LinkedIn Brand Consultant. Write a monthly Personal Brand Strategy Report for a user with this brand profile:
 Niche: ${profile.niche}
@@ -354,7 +354,7 @@ Return ONLY a JSON response structured like this:
   ]
 }
 `;
-                const result = await model.generateContent(prompt);
+                const result = await generateContentWithFallback({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7 } });
                 const responseText = result.response.text();
                 const jsonMatch = responseText.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {

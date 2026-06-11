@@ -200,7 +200,16 @@ export function Header() {
                 </Link>
               </>
             )}
-            {isAuthenticated && <UserDropdown />}
+            {isAuthenticated && (
+              <>
+                <Link href="/dashboard">
+                  <Button variant="outline" className="border-blue-600/30 hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 text-blue-600 dark:text-blue-400">
+                    Go to Dashboard
+                  </Button>
+                </Link>
+                <UserDropdown />
+              </>
+            )}
           </div>
 
           <MobileNav isAppPage={isAppPage} />

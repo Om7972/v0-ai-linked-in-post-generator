@@ -25,6 +25,7 @@ export interface GeneratePostParams {
   length: "short" | "medium" | "long";
   cta: string;
   grounding?: boolean; // Not applicable for Groq
+  personalStylePrompt?: string; // Personal writing style additions
 }
 
 export interface GeneratedPost {
@@ -51,11 +52,15 @@ export async function generateLinkedInPost(
     const promptTemplate = getPromptTemplate(params.tone);
     
     // Build the full prompt
-    const prompt = promptTemplate
+    let prompt = promptTemplate
       .replace("{{TOPIC}}", params.topic)
       .replace("{{AUDIENCE}}", params.audience)
       .replace("{{LENGTH}}", params.length)
       .replace("{{CTA}}", params.cta);
+
+    if (params.personalStylePrompt) {
+      prompt += `\n\nWriting Style Instructions:\n${params.personalStylePrompt}`;
+    }
 
     // Call Groq API
     const chatCompletion = await groq.chat.completions.create({

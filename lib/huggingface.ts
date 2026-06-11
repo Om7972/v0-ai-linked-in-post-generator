@@ -21,6 +21,7 @@ export interface GeneratePostParams {
   tone: "professional" | "founder" | "influencer" | "casual";
   length: "short" | "medium" | "long";
   cta: string;
+  personalStylePrompt?: string; // Personal writing style additions
 }
 
 export interface GeneratedPost {
@@ -96,11 +97,15 @@ export async function generateLinkedInPost(params: GeneratePostParams): Promise<
   try {
     const promptTemplate = getPromptTemplate(params.tone);
     
-    const prompt = promptTemplate
+    let prompt = promptTemplate
       .replace("{{TOPIC}}", params.topic)
       .replace("{{AUDIENCE}}", params.audience)
       .replace("{{LENGTH}}", params.length)
       .replace("{{CTA}}", params.cta);
+
+    if (params.personalStylePrompt) {
+      prompt += `\n\nWriting Style Instructions:\n${params.personalStylePrompt}`;
+    }
 
     const content = await callHuggingFace(prompt, 1000, 0.7);
 
