@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   BarChart3, Home, FileText, Settings, LogOut, Sparkles,
   Menu, X, User, TrendingUp, Crown, Flame, ChevronDown,
+  UserCheck, RefreshCw, LayoutDashboard
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -14,8 +15,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 
 const mainNavItems = [
-  { label: "Dashboard", href: "/dashboard", icon: Home },
+  { label: "Command Center", href: "/dashboard/command-center", icon: LayoutDashboard },
   { label: "Generate", href: "/generate", icon: Sparkles },
+  { label: "Profile Optimizer", href: "/dashboard/profile-optimizer", icon: UserCheck },
+  { label: "Content Repurposer", href: "/dashboard/content-repurposer", icon: RefreshCw },
   { label: "AI Brand Coach", href: "/dashboard/brand-coach", icon: Flame },
   { label: "Analytics", href: "/dashboard/analytics", icon: TrendingUp },
 ]

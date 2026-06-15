@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
 import { useOnboarding } from "@/hooks/use-onboarding"
+import { useAuth } from "@/hooks/use-auth"
 import { onboardingSteps } from "@/lib/onboarding-data"
 import { OnboardingWelcome } from "./onboarding-welcome"
 import { OnboardingTour } from "./onboarding-tour"
@@ -15,9 +16,15 @@ type TourTone = "Professional" | "Founder" | "Influencer" | "Casual"
 
 export function OnboardingDialog() {
   const onboarding = useOnboarding()
+  const { user, isLoading: authLoading } = useAuth()
   const [selectedTone, setSelectedTone] = useState<TourTone>("Professional")
 
-  if (!onboarding.isLoaded) {
+  if (authLoading || !onboarding.isLoaded) {
+    return null
+  }
+
+  // Don't show if user is not authenticated
+  if (!user) {
     return null
   }
 
