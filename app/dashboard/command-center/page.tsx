@@ -27,6 +27,8 @@ import {
   ListTodo,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
 
 interface ContentPillar {
   id: string;
@@ -91,11 +93,22 @@ const itemVariants = {
 export default function CommandCenterPage() {
   const [data, setData] = useState<CommandCenterData | null>(null);
   const [loading, setLoading] = useState(true);
+  const { token, isLoading: authLoading } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
+    if (!authLoading && !token) {
+      router.push("/auth/login");
+      return;
+    }
+
     const fetchData = async () => {
       try {
-        const response = await fetch("/api/command-center");
+        const response = await fetch("/api/command-center", {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        });
         if (!response.ok) throw new Error("Failed to fetch data");
         const result = await response.json();
         setData(result);
@@ -106,8 +119,10 @@ export default function CommandCenterPage() {
       }
     };
 
-    fetchData();
-  }, []);
+    if (token) {
+      fetchData();
+    }
+  }, [token, authLoading, router]);
 
   if (loading) {
     return <CommandCenterSkeleton />;
