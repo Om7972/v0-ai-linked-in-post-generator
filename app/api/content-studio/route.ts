@@ -73,20 +73,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Create content project
-    const { data: project, error: projectError } = await supabase
-      .from("content_projects")
-      .insert({
-        user_id: user.id,
-        topic,
-        tone,
-        audience,
-      })
-      .select()
-      .single();
-
-    if (projectError) throw projectError;
-
     // Generate outputs
     const outputs: Array<{ type: OutputType; content: string }> = [];
     for (const type of outputTypes) {
@@ -99,22 +85,50 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Save outputs to DB
-    const { data: savedOutputs, error: outputsError } = await supabase
-      .from("content_outputs")
-      .insert(
-        outputs.map((o) => ({
-          project_id: project.id,
-          output_type: o.type,
-          content: o.content,
-        }))
-      )
-      .select();
+    let projectId = `draft-${Date.now()}`;
+    let savedOutputs = outputs.map((o, index) => ({
+      id: `draft-output-${index}`,
+      output_type: o.type,
+      content: o.content,
+      version: 1,
+      created_at: new Date().toISOString(),
+    }));
 
-    if (outputsError) throw outputsError;
+    try {
+      const { data: project, error: projectError } = await supabase
+        .from("content_projects")
+        .insert({
+          user_id: user.id,
+          topic,
+          tone,
+          audience,
+        })
+        .select()
+        .single();
+
+      if (projectError) throw projectError;
+
+      projectId = project.id;
+
+      const { data: insertedOutputs, error: outputsError } = await supabase
+        .from("content_outputs")
+        .insert(
+          outputs.map((o) => ({
+            project_id: project.id,
+            output_type: o.type,
+            content: o.content,
+          }))
+        )
+        .select();
+
+      if (outputsError) throw outputsError;
+      savedOutputs = insertedOutputs || savedOutputs;
+    } catch (storageError) {
+      console.warn("Content Studio storage fallback engaged:", storageError);
+    }
 
     return NextResponse.json({
-      projectId: project.id,
+      projectId,
       outputs: savedOutputs,
     });
   } catch (error) {
@@ -138,15 +152,19 @@ export async function GET(req: NextRequest) {
 
     const supabase = createServerSupabaseClient();
 
-    const { data: projects, error: projectsError } = await supabase
-      .from("content_projects")
-      .select("*, content_outputs(*)")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    try {
+      const { data: projects, error: projectsError } = await supabase
+        .from("content_projects")
+        .select("*, content_outputs(*)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-    if (projectsError) throw projectsError;
-
-    return NextResponse.json(projects || []);
+      if (projectsError) throw projectsError;
+      return NextResponse.json(projects || []);
+    } catch (storageError) {
+      console.warn("Content Studio history fallback engaged:", storageError);
+      return NextResponse.json([]);
+    }
   } catch (error) {
     console.error("Content Studio API Error:", error);
     return NextResponse.json(

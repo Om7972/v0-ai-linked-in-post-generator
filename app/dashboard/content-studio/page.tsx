@@ -1,38 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
 import {
-  Sparkles,
-  Copy,
   Check,
-  Download,
-  Save,
-  Settings,
+  CheckCircle2,
+  Clock3,
   Command,
-  Users,
+  Copy,
+  Download,
+  History,
+  Layers3,
   Palette,
-  Layout,
+  Sparkles,
+  Users,
+  Wand2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { CommandPalette } from "@/components/power-user/command-palette";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+
+const DRAFT_STORAGE_KEY = "content-studio-draft-v1";
 
 const OUTPUT_TYPES = [
-  { id: "linkedin_post", label: "LinkedIn Post" },
-  { id: "linkedin_carousel", label: "LinkedIn Carousel" },
-  { id: "poll_ideas", label: "Poll Ideas" },
-  { id: "comment_suggestions", label: "Comment Suggestions" },
-  { id: "newsletter_draft", label: "Newsletter Draft" },
-  { id: "linkedin_headline", label: "LinkedIn Headline" },
-  { id: "about_section", label: "About Section" },
-  { id: "content_hooks", label: "Content Hooks" },
+  { id: "linkedin_post", label: "LinkedIn Post", description: "Primary long-form post for your feed" },
+  { id: "linkedin_carousel", label: "Carousel Script", description: "Slide-by-slide breakdown for carousels" },
+  { id: "poll_ideas", label: "Poll Ideas", description: "Interactive prompts to trigger engagement" },
+  { id: "comment_suggestions", label: "Comment Suggestions", description: "Thoughtful replies to deepen conversation" },
+  { id: "newsletter_draft", label: "Newsletter Draft", description: "Long-form email format for subscribers" },
+  { id: "linkedin_headline", label: "LinkedIn Headline", description: "Profile headline variations" },
+  { id: "about_section", label: "About Section", description: "Profile summary copy for authority building" },
+  { id: "content_hooks", label: "Content Hooks", description: "Opening lines with high stop-the-scroll potential" },
 ] as const;
 
 const TONES = [
@@ -40,51 +49,196 @@ const TONES = [
   { id: "casual", label: "Casual" },
   { id: "founder", label: "Founder" },
   { id: "influencer", label: "Influencer" },
-];
+] as const;
+
+interface ContentOutputRecord {
+  id?: string;
+  output_type: string;
+  content: string;
+  version?: number;
+  created_at?: string;
+}
+
+interface ContentProjectRecord {
+  id: string;
+  topic: string;
+  tone?: string;
+  audience?: string;
+  created_at: string;
+  content_outputs?: ContentOutputRecord[];
+}
 
 export default function ContentStudioPage() {
   const { token, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // Form state
   const [topic, setTopic] = useState("");
-  const [tone, setTone] = useState("professional");
+  const [tone, setTone] = useState<(typeof TONES)[number]["id"]>("professional");
   const [audience, setAudience] = useState("professionals in my industry");
-  const [selectedOutputs, setSelectedOutputs] = useState<string[]>(["linkedin_post"]);
-
-  // Generation state
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [currentProgress, setCurrentProgress] = useState(0);
-
-  // Results state
+  const [selectedOutputs, setSelectedOutputs] = useState<string[]>(["linkedin_post", "content_hooks"]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [outputs, setOutputs] = useState<Record<string, string>>({});
-  const [copied, setCopied] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("linkedin_post");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [history, setHistory] = useState<ContentProjectRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const orderedOutputTypes = useMemo(
+    () => OUTPUT_TYPES.filter((item) => selectedOutputs.includes(item.id)),
+    [selectedOutputs]
+  );
 
   useEffect(() => {
     if (!authLoading && !token) {
       router.push("/auth/login");
     }
-  }, [token, authLoading, router]);
+  }, [authLoading, router, token]);
+
+  useEffect(() => {
+    const storedDraft = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (storedDraft) {
+      try {
+        const parsed = JSON.parse(storedDraft);
+        setTopic(parsed.topic || "");
+        setTone(parsed.tone || "professional");
+        setAudience(parsed.audience || "professionals in my industry");
+        setSelectedOutputs(
+          Array.isArray(parsed.selectedOutputs) && parsed.selectedOutputs.length > 0
+            ? parsed.selectedOutputs
+            : ["linkedin_post", "content_hooks"]
+        );
+        setOutputs(parsed.outputs || {});
+        if (parsed.outputs && Object.keys(parsed.outputs).length > 0) {
+          setActiveTab(Object.keys(parsed.outputs)[0]);
+        }
+      } catch (error) {
+        console.warn("Failed to restore Content Studio draft:", error);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const topicFromQuery = searchParams.get("topic");
+    if (topicFromQuery) {
+      setTopic(topicFromQuery);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const draft = {
+      topic,
+      tone,
+      audience,
+      selectedOutputs,
+      outputs,
+    };
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  }, [audience, outputs, selectedOutputs, tone, topic]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        if (!isGenerating && topic.trim() && selectedOutputs.length > 0) {
+          void handleGenerate();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isGenerating, selectedOutputs.length, token, topic]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+    void fetchHistory();
+  }, [token]);
+
+  const fetchHistory = async () => {
+    if (!token) {
+      return;
+    }
+
+    setHistoryLoading(true);
+    try {
+      const response = await fetch("/api/content-studio", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to load Content Studio history");
+      }
+
+      const data = await response.json();
+      setHistory(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   const handleOutputToggle = (type: string) => {
-    setSelectedOutputs((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
+    setSelectedOutputs((current) => {
+      if (current.includes(type)) {
+        const next = current.filter((item) => item !== type);
+        return next.length > 0 ? next : current;
+      }
+      return [...current, type];
+    });
+  };
+
+  const loadProject = (project: ContentProjectRecord) => {
+    setProjectId(project.id);
+    setTopic(project.topic);
+    setTone((project.tone as (typeof TONES)[number]["id"]) || "professional");
+    setAudience(project.audience || "professionals in my industry");
+
+    const nextOutputs = (project.content_outputs || []).reduce<Record<string, string>>((acc, item) => {
+      acc[item.output_type] = item.content;
+      return acc;
+    }, {});
+
+    const nextSelectedOutputs = Object.keys(nextOutputs);
+    setSelectedOutputs(nextSelectedOutputs.length > 0 ? nextSelectedOutputs : ["linkedin_post"]);
+    setOutputs(nextOutputs);
+    setActiveTab(nextSelectedOutputs[0] || "linkedin_post");
+    toast({
+      title: "Version restored",
+      description: "Loaded the selected project into Content Studio.",
+    });
   };
 
   const handleGenerate = async () => {
-    if (!topic || selectedOutputs.length === 0) return;
+    if (!token || !topic.trim() || selectedOutputs.length === 0) {
+      return;
+    }
 
     setIsGenerating(true);
-    setCurrentProgress(0);
+    setProgress(12);
+
+    const timer = window.setInterval(() => {
+      setProgress((current) => (current >= 88 ? current : current + 8));
+    }, 350);
 
     try {
       const response = await fetch("/api/content-studio", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           topic,
@@ -94,309 +248,411 @@ export default function ContentStudioPage() {
         }),
       });
 
-      if (!response.ok) throw new Error("Generation failed");
+      const payload = await response.json();
 
-      const data = await response.json();
-      setProjectId(data.projectId);
-
-      const newOutputs: Record<string, string> = {};
-      for (let i = 0; i < data.outputs.length; i++) {
-        const out = data.outputs[i];
-        newOutputs[out.output_type] = out.content;
-        setCurrentProgress(Math.round(((i + 1) / data.outputs.length) * 100));
-        // Small delay to show progress
-        await new Promise((resolve) => setTimeout(resolve, 100));
+      if (!response.ok) {
+        throw new Error(payload.error || "Generation failed");
       }
-      setOutputs(newOutputs);
+
+      const nextOutputs = (payload.outputs || []).reduce<Record<string, string>>(
+        (acc: Record<string, string>, item: ContentOutputRecord) => {
+          acc[item.output_type] = item.content;
+          return acc;
+        },
+        {}
+      );
+
+      setProjectId(payload.projectId || null);
+      setOutputs(nextOutputs);
+      const firstTab = Object.keys(nextOutputs)[0] || selectedOutputs[0] || "linkedin_post";
+      setActiveTab(firstTab);
+      setProgress(100);
+      toast({
+        title: "Assets generated",
+        description: `Created ${Object.keys(nextOutputs).length} content assets from one idea.`,
+      });
+      await fetchHistory();
     } catch (error) {
-      console.error("Error generating:", error);
+      console.error(error);
+      toast({
+        title: "Generation failed",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
     } finally {
+      window.clearInterval(timer);
+      setTimeout(() => setProgress(0), 500);
       setIsGenerating(false);
     }
   };
 
-  const handleCopy = async (content: string, type: string) => {
+  const handleCopy = async (content: string, key: string) => {
     await navigator.clipboard.writeText(content);
-    setCopied(type);
-    setTimeout(() => setCopied(null), 2000);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 1800);
   };
 
   const handleExport = () => {
-    const content = Object.entries(outputs)
-      .map(([type, text]) => `# ${type}\n\n${text}\n\n`)
-      .join("");
-    const blob = new Blob([content], { type: "text/plain" });
+    const exportPayload = Object.entries(outputs)
+      .map(([key, value]) => {
+        const outputConfig = OUTPUT_TYPES.find((item) => item.id === key);
+        return `# ${outputConfig?.label || key}\n\n${value}\n`;
+      })
+      .join("\n\n");
+
+    const blob = new Blob([exportPayload], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `content-studio-${Date.now()}.txt`;
-    a.click();
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `content-studio-${Date.now()}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleReset = () => {
+    setProjectId(null);
+    setTopic("");
+    setTone("professional");
+    setAudience("professionals in my industry");
+    setSelectedOutputs(["linkedin_post", "content_hooks"]);
+    setOutputs({});
+    setActiveTab("linkedin_post");
   };
 
   if (authLoading || !token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="grid grid-cols-1 lg:grid-cols-12 h-[calc(100vh-80px)]">
-        {/* Left Panel */}
-        <div className="lg:col-span-3 border-r border-border/50 p-6 overflow-y-auto">
-          <div className="space-y-6">
+    <div className="space-y-6">
+      <CommandPalette />
+
+      <section className="relative overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-r from-blue-600/10 via-violet-600/10 to-cyan-500/10 p-6 shadow-sm">
+        <div className="absolute right-0 top-0 h-40 w-40 translate-x-10 -translate-y-10 rounded-full bg-blue-500/15 blur-3xl" />
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
+            <Badge className="border-0 bg-gradient-to-r from-blue-600 to-violet-600 text-white">
+              <Sparkles className="mr-1 h-3.5 w-3.5" />
+              AI Content Studio
+            </Badge>
             <div>
-              <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                <Sparkles className="h-6 w-6 text-primary" />
-                Content Studio
-              </h2>
-              <p className="text-muted-foreground text-sm">
-                Generate multiple content assets from one idea
+              <h1 className="text-3xl font-bold tracking-tight">Generate every asset from one idea</h1>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground md:text-base">
+                Build posts, profile assets, hooks, and newsletter drafts in one premium workspace without breaking the dashboard layout.
               </p>
             </div>
+          </div>
 
-            <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="rounded-full px-3 py-1">
+              <Command className="mr-1 h-3.5 w-3.5" />
+              Ctrl/Cmd + K
+            </Badge>
+            <Badge variant="secondary" className="rounded-full px-3 py-1">
+              <Wand2 className="mr-1 h-3.5 w-3.5" />
+              Ctrl/Cmd + Enter
+            </Badge>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+          <Card className="rounded-3xl border-border/60 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Layers3 className="h-5 w-5 text-primary" />
+                Studio Inputs
+              </CardTitle>
+              <CardDescription>Define the idea, audience, and asset mix once.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
               <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Layout className="h-4 w-4" />
-                  Topic
-                </label>
+                <label className="text-sm font-medium">Topic</label>
                 <Input
-                  placeholder="e.g., AI in marketing, remote work tips..."
                   value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
+                  onChange={(event) => setTopic(event.target.value)}
+                  placeholder="AI content strategy for B2B founders"
                   disabled={isGenerating}
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Palette className="h-4 w-4" />
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <Palette className="h-4 w-4 text-muted-foreground" />
                   Tone
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {TONES.map((t) => (
+                  {TONES.map((option) => (
                     <Button
-                      key={t.id}
-                      variant={tone === t.id ? "default" : "secondary"}
-                      size="sm"
-                      onClick={() => setTone(t.id)}
+                      key={option.id}
+                      type="button"
+                      variant={tone === option.id ? "default" : "secondary"}
+                      className="justify-center"
+                      onClick={() => setTone(option.id)}
                       disabled={isGenerating}
-                      className="w-full"
                     >
-                      {t.label}
+                      {option.label}
                     </Button>
                   ))}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Users className="h-4 w-4" />
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <Users className="h-4 w-4 text-muted-foreground" />
                   Audience
                 </label>
                 <Input
-                  placeholder="e.g., startup founders, software engineers..."
                   value={audience}
-                  onChange={(e) => setAudience(e.target.value)}
+                  onChange={(event) => setAudience(event.target.value)}
+                  placeholder="Startup founders and GTM leaders"
                   disabled={isGenerating}
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  Content Types
-                </label>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Content Types</label>
+                  <span className="text-xs text-muted-foreground">{selectedOutputs.length} selected</span>
+                </div>
                 <div className="space-y-2">
-                  {OUTPUT_TYPES.map((type) => (
+                  {OUTPUT_TYPES.map((item) => (
                     <div
-                      key={type.id}
-                      className="flex items-center space-x-2 p-2 rounded-lg hover:bg-accent transition-colors"
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleOutputToggle(item.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleOutputToggle(item.id);
+                        }
+                      }}
+                      className={cn(
+                        "flex w-full items-start gap-3 rounded-2xl border p-3 text-left transition-colors",
+                        "cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30",
+                        selectedOutputs.includes(item.id)
+                          ? "border-primary/30 bg-primary/5"
+                          : "border-border/60 hover:bg-muted/50"
+                      )}
                     >
                       <Checkbox
-                        id={type.id}
-                        checked={selectedOutputs.includes(type.id)}
-                        onCheckedChange={() => handleOutputToggle(type.id)}
-                        disabled={isGenerating}
+                        checked={selectedOutputs.includes(item.id)}
+                        onCheckedChange={() => handleOutputToggle(item.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        className="mt-0.5"
                       />
-                      <label
-                        htmlFor={type.id}
-                        className="text-sm font-medium cursor-pointer flex-1"
-                      >
-                        {type.label}
-                      </label>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.description}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="pt-4">
+              <div className="flex gap-2 pt-2">
                 <Button
-                  className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90"
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !topic || selectedOutputs.length === 0}
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700"
+                  disabled={isGenerating || !topic.trim() || selectedOutputs.length === 0}
+                  onClick={() => void handleGenerate()}
                 >
-                  {isGenerating ? (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2 animate-pulse" />
-                      Generating... {currentProgress}%
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Generate Content
-                    </>
-                  )}
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  {isGenerating ? "Generating..." : "Generate"}
+                </Button>
+                <Button variant="outline" onClick={handleReset} disabled={isGenerating}>
+                  Reset
                 </Button>
               </div>
-            </div>
-          </div>
-        </div>
+            </CardContent>
+          </Card>
 
-        {/* Center Panel */}
-        <div className="lg:col-span-1 p-6 border-r border-border/50 flex flex-col items-center justify-center bg-gradient-to-b from-background to-accent/20">
-          {isGenerating ? (
-            <div className="text-center space-y-4">
-              <div className="relative">
-                <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary border-t-transparent"></div>
-                </div>
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-2xl font-bold text-primary">
-                  {currentProgress}%
-                </div>
-              </div>
-              <p className="text-muted-foreground">
-                Generating your content...
-              </p>
-            </div>
-          ) : Object.keys(outputs).length > 0 ? (
-            <div className="text-center space-y-4">
-              <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
-              <div>
-                <h3 className="text-xl font-bold">Content Ready!</h3>
-                <p className="text-muted-foreground">
-                  {Object.keys(outputs).length} assets generated
-                </p>
-              </div>
-              <div className="flex gap-2 justify-center">
-                <Button variant="secondary" onClick={handleExport}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export All
-                </Button>
-                <Button variant="outline" onClick={() => {
-                  setOutputs({});
-                  setProjectId(null);
-                }}>
-                  New Project
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center space-y-4">
-              <Sparkles className="h-16 w-16 text-muted-foreground mx-auto" />
-              <div>
-                <h3 className="text-xl font-bold">Ready to create!</h3>
-                <p className="text-muted-foreground">
-                  Enter your topic and generate content
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right Panel */}
-        <div className="lg:col-span-8 p-6 overflow-y-auto">
-          {Object.keys(outputs).length > 0 ? (
-            <Tabs defaultValue={Object.keys(outputs)[0]} className="w-full">
-              <TabsList className="w-full flex-wrap h-auto p-1 mb-6">
-                {Object.keys(outputs).map((type) => {
-                  const typeInfo = OUTPUT_TYPES.find((t) => t.id === type);
-                  return (
-                    <TabsTrigger key={type} value={type} className="flex-1 min-w-[100px]">
-                      {typeInfo?.label}
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
-
-              {Object.entries(outputs).map(([type, content]) => (
-                <TabsContent key={type} value={type} className="mt-0">
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-4"
-                  >
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between">
-                        <div>
-                          <CardTitle>{OUTPUT_TYPES.find((t) => t.id === type)?.label}</CardTitle>
-                          <CardDescription>Generated content</CardDescription>
+          <Card className="rounded-3xl border-border/60 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <History className="h-5 w-5 text-primary" />
+                Version History
+              </CardTitle>
+              <CardDescription>Reload earlier projects and continue editing.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[260px] pr-3">
+                <div className="space-y-2">
+                  {historyLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading history...</p>
+                  ) : history.length > 0 ? (
+                    history.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => loadProject(item)}
+                        className={cn(
+                          "w-full rounded-2xl border p-3 text-left transition-colors hover:bg-muted/50",
+                          projectId === item.id ? "border-primary/30 bg-primary/5" : "border-border/60"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">{item.topic}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {(item.content_outputs || []).length} assets • {new Date(item.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <Clock3 className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
                         </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopy(content, type)}
-                          >
-                            {copied === type ? (
-                              <Check className="h-4 w-4 mr-1" />
-                            ) : (
-                              <Copy className="h-4 w-4 mr-1" />
-                            )}
-                            {copied === type ? "Copied!" : "Copy"}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-border/60 p-4 text-sm text-muted-foreground">
+                      Generated projects will appear here for quick restore and version reuse.
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-6">
+          <Card className="rounded-3xl border-border/60 shadow-sm">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <CardTitle className="text-lg">Generation Status</CardTitle>
+                  <CardDescription>
+                    Auto-save is enabled locally. Generated assets stay editable in place.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={handleExport} disabled={Object.keys(outputs).length === 0}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleCopy(Object.values(outputs).join("\n\n"), "all")}
+                    disabled={Object.keys(outputs).length === 0}
+                  >
+                    {copiedKey === "all" ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                    {copiedKey === "all" ? "Copied" : "Copy All"}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Topic</p>
+                  <p className="mt-2 text-sm font-medium">{topic || "No topic selected yet"}</p>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Tone</p>
+                  <p className="mt-2 text-sm font-medium capitalize">{tone}</p>
+                </div>
+                <div className="rounded-2xl border border-border/60 bg-muted/30 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Assets</p>
+                  <p className="mt-2 text-sm font-medium">{orderedOutputTypes.length}</p>
+                </div>
+              </div>
+
+              {isGenerating ? (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">Generating multi-output content</span>
+                    <span className="text-muted-foreground">{progress}%</span>
+                  </div>
+                  <Progress value={progress} className="h-2.5" />
+                  <p className="text-sm text-muted-foreground">
+                    Building professional assets from a single prompt and saving the session state.
+                  </p>
+                </motion.div>
+              ) : Object.keys(outputs).length > 0 ? (
+                <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                  <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                  <div>
+                    <p className="text-sm font-medium">Content bundle ready</p>
+                    <p className="text-sm text-muted-foreground">
+                      {Object.keys(outputs).length} outputs generated and available for edit, copy, or export.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border/60 p-6 text-center">
+                  <Sparkles className="mx-auto h-10 w-10 text-muted-foreground" />
+                  <p className="mt-3 text-sm font-medium">Content Studio is ready</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Add a topic, choose your formats, and run generation to fill the workspace.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border-border/60 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">Generated Content</CardTitle>
+              <CardDescription>Review, refine, and copy each asset individually.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {Object.keys(outputs).length > 0 ? (
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                  <TabsList className="mb-4 flex h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
+                    {orderedOutputTypes.map((item) => (
+                      <TabsTrigger
+                        key={item.id}
+                        value={item.id}
+                        className="rounded-full border border-border/60 bg-muted/40 px-4 py-2 data-[state=active]:border-primary/30 data-[state=active]:bg-primary/10"
+                      >
+                        {item.label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+
+                  {orderedOutputTypes.map((item) => (
+                    <TabsContent key={item.id} value={item.id} className="mt-0">
+                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+                        <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-muted/20 p-4 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="font-medium">{item.label}</p>
+                            <p className="text-sm text-muted-foreground">{item.description}</p>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={() => void handleCopy(outputs[item.id] || "", item.id)}>
+                            {copiedKey === item.id ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                            {copiedKey === item.id ? "Copied" : "Copy"}
                           </Button>
                         </div>
-                      </CardHeader>
-                      <CardContent>
                         <Textarea
-                          value={content}
-                          onChange={(e) =>
-                            setOutputs((prev) => ({ ...prev, [type]: e.target.value }))
+                          value={outputs[item.id] || ""}
+                          onChange={(event) =>
+                            setOutputs((current) => ({
+                              ...current,
+                              [item.id]: event.target.value,
+                            }))
                           }
-                          className="min-h-[400px] w-full resize-none bg-muted/30"
+                          className="min-h-[420px] resize-y rounded-2xl border-border/60 bg-background"
                         />
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                </TabsContent>
-              ))}
-            </Tabs>
-          ) : (
-            <div className="h-full flex items-center justify-center text-center">
-              <div className="space-y-4 max-w-md">
-                <Save className="h-12 w-12 mx-auto text-muted-foreground" />
-                <p className="text-muted-foreground">
-                  Select your content types and click generate to see your content here
-                </p>
-              </div>
-            </div>
-          )}
+                      </motion.div>
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border/60 p-10 text-center">
+                  <Wand2 className="mx-auto h-10 w-10 text-muted-foreground" />
+                  <p className="mt-3 text-sm font-medium">No assets generated yet</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Your output tabs will appear here once generation completes.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
-  );
-}
-
-// Import missing icon
-function CheckCircle({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </svg>
   );
 }

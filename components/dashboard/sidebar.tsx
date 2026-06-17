@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   BarChart3, Home, FileText, Settings, LogOut, Sparkles,
   Menu, X, User, TrendingUp, Crown, Flame, ChevronDown,
-  UserCheck, RefreshCw, LayoutDashboard, Layers
+  UserCheck, RefreshCw, LayoutDashboard, Layers, Lightbulb
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 const mainNavItems = [
   { label: "Command Center", href: "/dashboard/command-center", icon: LayoutDashboard },
   { label: "Content Studio", href: "/dashboard/content-studio", icon: Layers },
+  { label: "Opportunities", href: "/opportunities", icon: Lightbulb },
   { label: "Generate", href: "/generate", icon: Sparkles },
   { label: "Profile Optimizer", href: "/dashboard/profile-optimizer", icon: UserCheck },
   { label: "Content Repurposer", href: "/dashboard/content-repurposer", icon: RefreshCw },
