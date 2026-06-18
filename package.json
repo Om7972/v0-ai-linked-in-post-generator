@@ -70,6 +70,7 @@
     "zod": "3.25.67"
   },
   "devDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "^4.3.1",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/bcryptjs": "^3.0.0",
     "@types/jsonwebtoken": "^9.0.10",
