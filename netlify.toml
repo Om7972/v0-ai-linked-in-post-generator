@@ -24,6 +24,6 @@
 # Redirects for SPA
 [[redirects]]
   from = "/*"
-  to = "/index.html"
+  to = "https://ai-linkedin-post-backend.onrender.com/"
   status = 200
   conditions = {Role = ["admin"]}
